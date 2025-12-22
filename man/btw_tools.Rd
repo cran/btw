@@ -27,7 +27,7 @@ place. The \code{chat} input is returned invisibly.
 }
 \description{
 The \code{btw_tools()} function provides a list of tools that can be registered
-with an ellmer chat via \code{chat$set_tools()} that allow the chat to
+with an ellmer chat via \code{chat$register_tools()} that allow the chat to
 interface with your computational environment. Chats returned by
 this function have access to the tools:
 \subsection{Group: docs}{\tabular{ll}{
@@ -86,6 +86,23 @@ this function have access to the tools:
 
 }
 
+\subsection{Group: pkg}{\tabular{ll}{
+   Name \tab Description \cr
+   \code{\link[=btw_tool_pkg_check]{btw_tool_pkg_check()}} \tab Run comprehensive package checks. \cr
+   \code{\link[=btw_tool_pkg_coverage]{btw_tool_pkg_coverage()}} \tab Compute test coverage for an R package. \cr
+   \code{\link[=btw_tool_pkg_document]{btw_tool_pkg_document()}} \tab Generate package documentation. \cr
+   \code{\link[=btw_tool_pkg_test]{btw_tool_pkg_test()}} \tab Run testthat tests for an R package. \cr
+}
+
+}
+
+\subsection{Group: run}{\tabular{ll}{
+   Name \tab Description \cr
+   \code{\link[=btw_tool_run_r]{btw_tool_run_r()}} \tab Run R code. \cr
+}
+
+}
+
 \subsection{Group: search}{\tabular{ll}{
    Name \tab Description \cr
    \code{\link[=btw_tool_search_package_info]{btw_tool_search_package_info()}} \tab Describe a CRAN package. \cr
@@ -116,29 +133,12 @@ this function have access to the tools:
 ch <- ellmer::chat_anthropic()
 
 # register all of the available tools
-ch$set_tools(btw_tools())
+ch$register_tools(btw_tools())
 
 # or register only the tools related to fetching documentation
-ch$set_tools(btw_tools("docs"))
+ch$register_tools(btw_tools("docs"))
 
 # ensure that the current tools persist
-ch$set_tools(c(ch$get_tools(), btw_tools()))
+ch$register_tools(c(ch$get_tools(), btw_tools()))
 \dontshow{\}) # examplesIf}
 }
-\seealso{
-Other Tools: 
-\code{\link{btw_tool_docs_package_news}()},
-\code{\link{btw_tool_env_describe_data_frame}()},
-\code{\link{btw_tool_env_describe_environment}()},
-\code{\link{btw_tool_files_code_search}()},
-\code{\link{btw_tool_files_list_files}()},
-\code{\link{btw_tool_files_read_text_file}()},
-\code{\link{btw_tool_files_write_text_file}()},
-\code{\link{btw_tool_ide_read_current_editor}()},
-\code{\link{btw_tool_package_docs}},
-\code{\link{btw_tool_search_packages}()},
-\code{\link{btw_tool_session_package_info}()},
-\code{\link{btw_tool_session_platform_info}()},
-\code{\link{btw_tool_web_read_url}()}
-}
-\concept{Tools}

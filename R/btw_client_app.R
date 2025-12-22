@@ -15,7 +15,7 @@ btw_app <- function(
   rlang::check_installed("shiny")
   rlang::check_installed("bslib")
   rlang::check_installed("htmltools")
-  rlang::check_installed("shinychat", version = "0.2.0")
+  rlang::check_installed("shinychat", version = "0.3.0")
 
   if (getOption("btw.app.close_on_session_end", FALSE)) {
     cli::cli_alert("Starting up {.fn btw::btw_app} ...")
@@ -30,6 +30,20 @@ btw_app <- function(
   }
 
   btw_app_from_client(client, messages = messages, ...)
+}
+
+btw_app_html_dep <- function() {
+  htmltools::htmlDependency(
+    name = "btw",
+    version = utils::packageVersion("btw"),
+    package = "btw",
+    src = "js/app",
+    script = list(
+      list(src = "btw_app.js", type = "module")
+    ),
+    stylesheet = "btw_app.css",
+    all_files = TRUE
+  )
 }
 
 btw_app_from_client <- function(client, messages = list(), ...) {
@@ -118,6 +132,15 @@ btw_app_from_client <- function(client, messages = list(), ...) {
         class = "btn-close",
         style = "position: fixed; top: 6px; right: 6px;"
       ),
+      class = "bslib-page-dashboard",
+      class = if (nzchar(which_ide())) {
+        c("btw-in-ide", sprintf("btw-in-%s", which_ide()))
+      },
+      htmltools::tags$div(
+        "aria-label" = "Show keyboard shortcuts",
+        "aria-keyshortcuts" = "?",
+        class = "visually-hidden"
+      ),
       btw_title(FALSE),
       shinychat::chat_mod_ui(
         "chat",
@@ -127,19 +150,7 @@ btw_app_from_client <- function(client, messages = list(), ...) {
       if (utils::packageVersion("shinychat") >= "0.2.0.9000") {
         btw_status_bar_ui("status_bar", provider_model)
       },
-      shiny::tags$head(
-        shiny::tags$style(shiny::HTML(
-          "
-        :root { --bslib-sidebar-width: max(30vw, 275px); }
-        .opacity-100-hover:hover { opacity: 1 !important; }
-        :hover > .opacity-100-hover-parent, .opacity-100-hover-parent:hover { opacity: 1 !important; }
-        .bslib-sidebar-layout > .main > main .sidebar-title { display: none; }
-        .sidebar-collapsed > .main > main .sidebar-title { display: block; }
-        .bslib-sidebar-layout.sidebar-collapsed>.collapse-toggle { top: 1.8rem; }
-        .bslib-page-main { gap: 0.5rem; }
-      "
-        )),
-      )
+      btw_app_html_dep(),
     )
   }
 
@@ -215,13 +226,16 @@ btw_app_from_client <- function(client, messages = list(), ...) {
       if (!length(selected_tools())) {
         client$set_tools(list())
       } else {
-        .btw_tools <- keep(btw_tools(), function(tool) {
+        sel_btw_tools <- btw_tools(
+          intersect(names(.btw_tools), selected_tools())
+        )
+        sel_other_tools <- keep(other_tools, function(tool) {
           tool@name %in% selected_tools()
         })
-        .other_tools <- keep(other_tools, function(tool) {
-          tool@name %in% selected_tools()
-        })
-        client$set_tools(c(.btw_tools, other_tools))
+        sel_tools <- c(sel_btw_tools, sel_other_tools)
+        # tool_names <- map_chr(tools, S7::prop, "name")
+        # cli::cli_inform("Setting {.field client} tools to: {.val {tool_names}}")
+        client$set_tools(sel_tools)
       }
     })
 
@@ -246,6 +260,66 @@ btw_app_from_client <- function(client, messages = list(), ...) {
       app_tool_group_choice_input("other", other_tools_df)
     })
 
+    shiny::observeEvent(input[["__btw_show_shortcuts"]], {
+      shortcut_data <- input[["__btw_show_shortcuts"]]
+
+      shiny::showModal(
+        shiny::modalDialog(
+          id = "btw_keyboard_shortcuts_modal",
+          title = sprintf("Keyboard Shortcuts (%s)", shortcut_data$platform),
+          size = "m",
+          easyClose = TRUE,
+          footer = NULL,
+          btw_keyboard_shortcuts(shortcut_data$shortcuts)
+        )
+      )
+    })
+
+    shiny::observeEvent(input[["__btw_ide_open_file"]], {
+      path <- input[["__btw_ide_open_file"]]
+      if (rstudioapi::hasFun("navigateToFile")) {
+        rstudioapi::navigateToFile(path)
+      } else {
+        cli::cli_alert(c(
+          "Your IDE does not support opening files with {.pkg rstudioapi}.",
+          "i" = "{.path {path}}"
+        ))
+      }
+    })
+
+    if (rstudioapi::hasFun("insertText")) {
+      shiny::observeEvent(input[["__btw_ide_insert_code"]], {
+        code <- input[["__btw_ide_insert_code"]]
+        tryCatch(
+          switch(
+            code$location,
+            new_file = ide_insert_new_file(code$code, code$language %||% "r"),
+            cursor = ide_insert_cursor(code$code),
+            console = ide_run_in_console(code$code),
+            cli::cli_abort(
+              "Unknown code insertion location: {.val {code$location}}"
+            )
+          ),
+          error = function(err) {
+            if (nchar(code$code) > 50) {
+              code_preview <- paste0(
+                substr(code$code, 1, 47),
+                "..."
+              )
+            } else {
+              code_preview <- code$code
+            }
+
+            cli::cli_warn(c(
+              "Failed to insert code into IDE: {.msg {err$message}}",
+              "i" = "Location: {.val {code$location}}",
+              "i" = "Code: {.val {code_preview}}"
+            ))
+          }
+        )
+      })
+    }
+
     shiny::observeEvent(input$close_btn, {
       shiny::stopApp()
     })
@@ -268,6 +342,10 @@ btw_app_from_client <- function(client, messages = list(), ...) {
     load.interface = old_load,
     save.interface = old_save
   ))
+
+  if (identical(Sys.getenv("BTW_IN_TESTING"), "true")) {
+    return(list(ui = ui, server = server))
+  }
 
   app <- shiny::shinyApp(ui, server, ...)
   if (getOption("btw.app.in_addin", FALSE)) {
@@ -300,6 +378,7 @@ btw_status_bar_ui <- function(id, provider_model) {
       shiny::div(
         class = "ms-auto status-tokens font-monospace",
         bslib::tooltip(
+          id = ns("status_tokens_input_tooltip"),
           shiny::span(
             id = ns("status_tokens_input"),
             class = "status-countup",
@@ -327,20 +406,6 @@ btw_status_bar_ui <- function(id, provider_model) {
           ),
           "Estimated cost"
         )
-      ),
-      htmltools::htmlDependency(
-        name = "countup.js",
-        version = readLines(
-          system.file("js/countupjs/VERSION", package = "btw")
-        ),
-        package = "btw",
-        src = "js/countupjs",
-        script = list(
-          list(src = "countUp.min.js", type = "module"),
-          list(src = "btw_app.js", type = "module")
-        ),
-        stylesheet = "btw_app.css",
-        all_files = FALSE
       )
     )
   )
@@ -351,9 +416,50 @@ btw_status_bar_server <- function(id, chat) {
     id,
     function(input, output, session) {
       chat_get_tokens <- function() {
-        tryCatch(
+        tokens <- tryCatch(
           chat$client$get_tokens(),
           error = function(e) NULL
+        )
+        if (is.null(tokens)) {
+          return(NULL)
+        }
+
+        input_tokens <- 0
+        output_tokens <- 0
+        cached_tokens <- 0
+
+        if (!is.null(tokens) && nrow(tokens) > 0) {
+          if (utils::packageVersion("ellmer") <= "0.3.0") {
+            last_user <- tokens[tokens$role == "user", ]
+            if (nrow(last_user) > 0) {
+              input_tokens <- as.integer(utils::tail(last_user$tokens_total, 1))
+            }
+            tokens_assistant <- tokens[tokens$role == "assistant", ]
+            if (nrow(tokens_assistant) > 0) {
+              output_tokens <- as.integer(sum(tokens_assistant$tokens))
+            }
+          } else {
+            # output tokens are by turn, so we sum them all
+            if ("output" %in% colnames(tokens)) {
+              output_tokens <- sum(tokens$output)
+            }
+            # input and cached tokens are accumulated in the last API call
+            if ("input" %in% colnames(tokens)) {
+              input_tokens <-
+                tokens$input[[length(tokens$input)]]
+            }
+            if ("cached_input" %in% colnames(tokens)) {
+              cached_tokens <- tokens$cached_input[[
+                length(tokens$cached_input)
+              ]]
+            }
+          }
+        }
+
+        list(
+          input = input_tokens,
+          output = output_tokens,
+          cached = cached_tokens
         )
       }
 
@@ -401,30 +507,27 @@ btw_status_bar_server <- function(id, chat) {
 
       shiny::observeEvent(chat_tokens(), {
         tokens <- chat_tokens()
-        value <- 0
 
-        if (!is.null(tokens) && nrow(tokens) > 1) {
-          last_user <- tokens[tokens$role == "user", ]
-          if (nrow(last_user) > 0) {
-            value <- as.integer(utils::tail(last_user$tokens_total, 1))
-          }
+        send_status_message(
+          "status_tokens_input",
+          "ready",
+          # show input + cached tokens to get total tokens
+          value = tokens$input + tokens$cached
+        )
+        if (tokens$cached > 0) {
+          bslib::update_tooltip(
+            "status_tokens_input_tooltip",
+            sprintf(
+              "Input tokens (%s cached)",
+              format(tokens$cached, big.mark = ",")
+            )
+          )
         }
-
-        send_status_message("status_tokens_input", "ready", value = value)
-      })
-
-      shiny::observeEvent(chat_tokens(), {
-        tokens <- chat_tokens()
-        value <- 0
-
-        if (!is.null(tokens) && nrow(tokens) > 1) {
-          tokens_assistant <- tokens[tokens$role == "assistant", ]
-          if (nrow(tokens_assistant) > 0) {
-            value <- as.integer(sum(tokens_assistant$tokens))
-          }
-        }
-
-        send_status_message("status_tokens_output", "ready", value = value)
+        send_status_message(
+          "status_tokens_output",
+          "ready",
+          value = tokens$output
+        )
       })
 
       shiny::observeEvent(chat_cost(), {
@@ -574,10 +677,13 @@ app_tool_group_choice_input <- function(
     group,
     "docs" = shiny::span(label_icon, "Documentation"),
     "env" = shiny::span(label_icon, "Environment"),
+    "eval" = shiny::span(label_icon, "Code Evaluation"),
     "files" = shiny::span(label_icon, "Files"),
     "git" = shiny::span(label_icon, "Git"),
     "github" = shiny::span(label_icon, "GitHub"),
     "ide" = shiny::span(label_icon, "IDE"),
+    "pkg" = shiny::span(label_icon, "Package Tools"),
+    "run" = shiny::span(label_icon, "Run Code"),
     "search" = shiny::span(label_icon, "Search"),
     "session" = shiny::span(label_icon, "Session Info"),
     "web" = shiny::span(label_icon, "Web Tools"),
@@ -649,6 +755,21 @@ app_tool_group_choices_labels <- function(
       )
     }
   )
+}
+
+# Keyboard Shortcuts ----
+btw_keyboard_shortcuts <- function(shortcuts) {
+  items_html <- lapply(shortcuts, function(s) {
+    keys <- strsplit(s$keys, "+", fixed = TRUE)[[1]]
+
+    htmltools::tags$div(
+      style = "margin-bottom: 8px;",
+      lapply(keys, htmltools::tags$kbd),
+      htmltools::tags$span(style = "margin-left: 6px;", s$action)
+    )
+  })
+
+  items_html
 }
 
 # App bookmarking ----

@@ -1,3 +1,5 @@
+local_sessioninfo_quarto_version()
+
 test_that("btw_tool_session_platform_info() works", {
   with_mocked_platform({
     platform_data <- platform_info()
@@ -112,6 +114,10 @@ test_that("btw_this('@loaded_packages')", {
 })
 
 test_that("btw_this('@installed_packages')", {
+  local_mocked_bindings(
+    package_info = function(x, ...) data.frame(packages = x)
+  )
+
   expect_type(btw_this("@installed_packages"), "character")
   expect_equal(
     btw_this("@installed_packages"),

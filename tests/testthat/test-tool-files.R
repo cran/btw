@@ -16,7 +16,7 @@ test_that("btw_tool_files_list_files() works", {
     "test\\.csv"
   )
 
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
 
   expect_snapshot(
     writeLines(btw_tool_files_list_files()@value),
@@ -76,7 +76,7 @@ test_that("btw_tool_files_read_text_file() works", {
     "```csv\n15,8,301,335,3.54,3.57,14.6,0,1,5,8\n21.4,4,121,109,4.11,2.78,18.6,1,1,4,2\n```"
   )
 
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
 
   expect_snapshot(
     btw_tool_files_read_text_file("mtcars.rds"),
@@ -172,14 +172,14 @@ test_that("btw_tool_files_write_text_file() works", {
   expect_null(res_write_data@extra$previous_content, NULL)
 
   expect_equal(
-    readLines("test.txt"),
+    read_lines("test.txt"),
     c("Hello", "World!")
   )
 
   # Test overwriting
   res_write_data2 <- btw_tool_files_write_text_file("test.txt", "New content")
   expect_equal(
-    readLines("test.txt"),
+    read_file("test.txt"),
     "New content"
   )
 

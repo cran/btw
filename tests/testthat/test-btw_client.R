@@ -1,6 +1,6 @@
-local_mocked_bindings(
-  btw_can_register_gh_tool = function() FALSE
-)
+local_enable_tools()
+local_sessioninfo_quarto_version()
+withr::local_options(btw.client.quiet = TRUE)
 
 describe("btw_client() chat client", {
   withr::local_envvar(list(ANTHROPIC_API_KEY = "beep"))
@@ -26,7 +26,7 @@ describe("btw_client() chat client", {
       "You have access to tools"
     )
 
-    skip_if_not_macos()
+    skip_if_not_snapshot_env()
     expect_snapshot(print(chat), transform = scrub_system_info)
   })
 
@@ -96,7 +96,7 @@ test_that("btw_client() adds `btw.md` context file to system prompt", {
     fixed = TRUE
   )
 
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
   expect_snapshot(print(chat), transform = scrub_system_info)
 })
 
@@ -161,6 +161,56 @@ describe("btw_client() with context files", {
     expect_equal(chat_agents, chat_btw)
   })
 
+  it("uses CLAUDE.md but ignores its YAML frontmatter", {
+    # Move btw.md out of the way so CLAUDE.md is found
+    fs::file_move(fs::path(wd, "../btw.md"), fs::path(wd, "../btw-backup.md"))
+    withr::defer(
+      fs::file_move(fs::path(wd, "../btw-backup.md"), fs::path(wd, "../btw.md"))
+    )
+
+    # Create CLAUDE.md with YAML frontmatter that has client config
+    writeLines(
+      con = file.path(wd, "..", "CLAUDE.md"),
+      c(
+        "---",
+        "client:",
+        "  provider: openai",
+        "  model: gpt-5",
+        "tools: btw_tool_docs_vignette",
+        "---",
+        "",
+        "* Use CLAUDE.md style guidelines",
+        "* YAML config should be ignored"
+      )
+    )
+    withr::defer(unlink(file.path(wd, "..", "CLAUDE.md")))
+
+    with_mocked_platform(ide = "rstudio", {
+      chat_claude <- btw_client()
+    })
+
+    # Body content should be in system prompt
+    expect_match(
+      chat_claude$get_system_prompt(),
+      "Use CLAUDE.md style guidelines",
+      fixed = TRUE
+    )
+    expect_match(
+      chat_claude$get_system_prompt(),
+      "YAML config should be ignored",
+      fixed = TRUE
+    )
+
+    # YAML config should be ignored
+    client_default <- btw_default_chat_client()
+    expect_equal(chat_claude$get_model(), client_default$get_model())
+    expect_equal(
+      chat_claude$get_provider()@name,
+      client_default$get_provider()@name
+    )
+    expect_gt(length(chat_claude$get_tools()), 1)
+  })
+
   it("includes llms.txt content in system prompt", {
     writeLines(
       con = file.path(wd, "llms.txt"),
@@ -200,7 +250,7 @@ describe("btw_client() with context files", {
       chat$get_system_prompt()
     )
 
-    skip_if_not_macos()
+    skip_if_not_snapshot_env()
     expect_snapshot(print(chat), transform = scrub_system_info)
   })
 
@@ -211,7 +261,7 @@ describe("btw_client() with context files", {
       chat_parent_llms <- btw_client()
     })
 
-    skip_if_not_macos()
+    skip_if_not_snapshot_env()
     expect_snapshot(print(chat_parent_llms), transform = scrub_system_info)
   })
 
@@ -293,7 +343,7 @@ describe("btw_client() project vs user settings", {
     expect_equal(chat$get_model(), "claude-3-5-sonnet-20241022")
     expect_s3_class(chat$get_provider(), "ellmer::ProviderAnthropic")
 
-    skip_if_not_macos()
+    skip_if_not_snapshot_env()
     expect_snapshot(print(chat), transform = scrub_system_info)
   })
 
@@ -332,7 +382,7 @@ describe("btw_client() project vs user settings", {
     expect_equal(chat$get_model(), "gpt-4o")
     expect_s3_class(chat$get_provider(), "ellmer::ProviderOpenAI")
 
-    skip_if_not_macos()
+    skip_if_not_snapshot_env()
     expect_snapshot(print(chat), transform = scrub_system_info)
   })
 

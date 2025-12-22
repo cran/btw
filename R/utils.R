@@ -9,13 +9,13 @@ pandoc_convert <- function(path, ..., from = "html", to = "markdown") {
     ...
   )
 
-  readLines(tmp_file)
+  read_lines(tmp_file)
 }
 
 pandoc_convert_text <- function(text, ..., from = "html", to = "markdown") {
   map_chr(text, function(x) {
     tmp_input <- withr::local_tempfile()
-    writeLines(x, tmp_input)
+    write_file(x, tmp_input)
     paste(pandoc_convert(tmp_input, from = from, to = to, ...), collapse = "\n")
   })
 }
@@ -29,9 +29,60 @@ pandoc_html_simplify <- function(
   ),
   to = "markdown_strict-raw_html+pipe_tables+backtick_code_blocks"
 ) {
+  # Remove base64 embedded images to avoid bloating the output
+  html <- remove_base64_images(html)
+
   tmp_input <- withr::local_tempfile()
-  writeLines(html, tmp_input)
+  write_lines(html, tmp_input)
   pandoc_convert(tmp_input, from = "html", to = to, ...)
+}
+
+xml_from_html <- function(html) {
+  html_text <- paste(html, collapse = "\n")
+
+  doc <- tryCatch(
+    xml2::read_html(html_text),
+    error = function(e) NULL
+  )
+
+  doc
+}
+
+#' Remove base64 embedded images from HTML
+#'
+#' Replaces <img> tags with base64 data URIs with a text placeholder
+#' containing the alt text if available.
+#'
+#' @param html Character vector of HTML content
+#' @return Character vector with images removed/replaced
+#' @noRd
+remove_base64_images <- function(html) {
+  doc <- xml_from_html(html)
+
+  if (is.null(doc)) {
+    return(html)
+  }
+
+  # Find all <img> tags with data: URIs (includes base64 and other data URIs)
+  img_nodes <- xml2::xml_find_all(doc, "//img[contains(@src, 'data:')]")
+
+  if (length(img_nodes) == 0) {
+    return(html)
+  }
+
+  # Replace data: URI images with text placeholders
+  for (img in img_nodes) {
+    alt_text <- xml2::xml_attr(img, "alt")
+    replacement <- if (!is.na(alt_text) && nzchar(alt_text)) {
+      sprintf("[Image: %s]", alt_text)
+    } else {
+      "[Image]"
+    }
+
+    xml2::xml_replace(img, "span", replacement)
+  }
+
+  as.character(doc)
 }
 
 cli_escape <- function(x) {
@@ -138,22 +189,45 @@ path_btw_cache <- function(...) {
 local_reproducible_output <- function(
   width = 80L,
   max.print = 100,
+  disable_ansi_features = TRUE,
   .env = parent.frame()
 ) {
   # Replicating testthat::local_reproducible_output()
   withr::local_options(width = width, cli.width = width, .local_envir = .env)
-  withr::local_envvar(RSTUDIO_CONSOLE_WIDTH = width, .local_envir = .env)
-  withr::local_envvar(list(NO_COLOR = "true"), .local_envir = .env)
+  withr::local_envvar(
+    RSTUDIO_CONSOLE_WIDTH = width,
+    R_CLI_DYNAMIC = "false",
+    .local_envir = .env
+  )
+
+  if (disable_ansi_features) {
+    withr::local_envvar(NO_COLOR = "true", .local_envir = .env)
+    withr::local_options(
+      crayon.enabled = FALSE,
+      cli.unicode = FALSE,
+      cli.condition_width = Inf,
+      cli.num_colors = 1L,
+      .local_envir = .env
+    )
+  } else {
+    withr::local_envvar(list(NO_COLOR = NA), .local_envir = .env)
+    withr::local_options(
+      crayon.enabled = TRUE,
+      cli.ansi = TRUE,
+      cli.unicode = TRUE,
+      cli.condition_width = width,
+      cli.num_colors = 16L,
+      .local_envir = .env
+    )
+  }
+
   withr::local_options(
-    crayon.enabled = FALSE,
+    cli.dynamic = FALSE,
+    cli.spinner = FALSE,
     cli.hyperlink = FALSE,
     cli.hyperlink_run = FALSE,
     cli.hyperlink_help = FALSE,
     cli.hyperlink_vignette = FALSE,
-    cli.dynamic = FALSE,
-    cli.unicode = FALSE,
-    cli.condition_width = Inf,
-    cli.num_colors = 1L,
     useFancyQuotes = FALSE,
     lifecycle_verbosity = "warning",
     OutDec = ".",
@@ -161,6 +235,12 @@ local_reproducible_output <- function(
     max.print = max.print,
     .local_envir = .env
   )
+}
+
+strip_ansi <- function(text) {
+  # Matches codes like "\x1B[31;43m", "\x1B[1;3;4m"
+  ansi_pattern <- "(\x1B|\x033)\\[[0-9;?=<>]*[@-~]"
+  gsub(ansi_pattern, "", text)
 }
 
 to_title_case <- function(x) {

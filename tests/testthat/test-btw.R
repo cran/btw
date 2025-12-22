@@ -1,5 +1,5 @@
 test_that("btw() formats output as expected", {
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
 
   expect_snapshot(cli::cat_line(btw(mtcars)))
 })
@@ -26,14 +26,18 @@ test_that("btw() works with vars that return characters of the same name", {
 })
 
 test_that("btw() allows injection", {
+  local_mocked_bindings(
+    btw_this_package_braces = function(x) x
+  )
+
   expect_equal(
-    format(btw(!!sprintf("{%s}", "tibble"))),
-    format(btw("{tibble}"))
+    btw(!!sprintf("{%s}", "tibble")),
+    btw("{tibble}")
   )
 
   x <- "{tibble}"
   expect_equal(
-    format(btw({{ x }})),
-    format(btw("{tibble}"))
+    btw({{ x }}),
+    btw("{tibble}")
   )
 })

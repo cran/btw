@@ -27,7 +27,6 @@ test_that("btw_tool_ide_read_current_editor() has informative errors", {
 
 mock_source_editor_full <- function() {
   # Open fixtures/test.R
-  # mock1 <- rstudioapi_get_source_editor_context()
   # constructive::construct(mock1) |> capture.output() |> parse(text = _) |> format()
 
   structure(
@@ -68,7 +67,6 @@ mock_source_editor_full <- function() {
 mock_source_editor_selection <- function() {
   # Open fixtures/test.scss
   # select regions
-  # mock2 <- rstudioapi_get_source_editor_context()
   # constructive::construct(mock2) |> capture.output() |> parse(text = _) |> format()
 
   structure(
@@ -176,7 +174,7 @@ test_that("@current_file", {
     btw_tool_ide_read_current_editor(selection = FALSE, consent = TRUE)
   )
 
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
   expect_snapshot(
     cli::cat_line(btw("@current_file"))
   )
@@ -198,7 +196,7 @@ test_that("@current_selection", {
     I(btw_tool_ide_read_current_editor(consent = TRUE)@value)
   )
 
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
   expect_snapshot(
     cli::cat_line(btw("@current_selection"))
   )

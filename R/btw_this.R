@@ -22,6 +22,11 @@ btw_this.default <- function(x, ...) {
   capture_print(x)
 }
 
+#' @export
+btw_this.matrix <- function(x, ...) {
+  capture_print(x)
+}
+
 capture_print <- function(x) {
   # TODO: Replace with {evaluate}
   local_reproducible_output(max.print = 100)
@@ -650,9 +655,11 @@ btw_this_file_path <- function(x) {
     path <- "."
   }
   if (fs::is_file(path)) {
-    return(btw_tool_files_read_text_file_impl(path)@value)
+    return(
+      btw_tool_files_read_text_file_impl(path, check_within_wd = FALSE)@value
+    )
   } else {
-    return(btw_tool_files_list_files_impl(path)@value)
+    return(btw_tool_files_list_files_impl(path, check_within_wd = FALSE)@value)
   }
 }
 

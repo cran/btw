@@ -22,14 +22,15 @@ NULL
 #'
 #' @return Returns a character table of file information.
 #'
-#' @family Tools
+#' @family files tools
 #' @export
 btw_tool_files_list_files <- function(path, type, regexp, `_intent`) {}
 
 btw_tool_files_list_files_impl <- function(
   path = NULL,
   type = c("any", "file", "directory"),
-  regexp = ""
+  regexp = "",
+  check_within_wd = TRUE
 ) {
   path <- path %||% getwd()
   type <- type %||% "any"
@@ -42,8 +43,9 @@ btw_tool_files_list_files_impl <- function(
 
   regexp <- if (nzchar(regexp)) regexp
 
-  # Disallow listing files outside of the project directory
-  check_path_within_current_wd(path)
+  if (check_within_wd) {
+    check_path_within_current_wd(path, call = parent.frame())
+  }
 
   info <-
     if (fs::is_file(path)) {
@@ -81,7 +83,15 @@ btw_tool_files_list_files_impl <- function(
   group = "files",
   tool = function() {
     ellmer::tool(
-      btw_tool_files_list_files_impl,
+      function(path = NULL, type = c("any", "file", "directory"), regexp = "") {
+        btw_tool_files_list_files_impl(
+          path = path,
+          type = type,
+          regexp = regexp,
+          # LLM tool calls should be restricted to the working directory
+          check_within_wd = TRUE
+        )
+      },
       name = "btw_tool_files_list_files",
       description = r"---(List files or directories in the project.
 
@@ -146,7 +156,7 @@ CAUTION: Do not list all files in a project, instead prefer listing files in a s
 #'
 #' @return Returns a character vector of lines from the file.
 #'
-#' @family Tools
+#' @family files tools
 #' @export
 btw_tool_files_read_text_file <- function(
   path,
@@ -158,9 +168,12 @@ btw_tool_files_read_text_file <- function(
 btw_tool_files_read_text_file_impl <- function(
   path,
   line_start = 1,
-  line_end = 1000
+  line_end = 1000,
+  check_within_wd = TRUE
 ) {
-  check_path_within_current_wd(path)
+  if (check_within_wd) {
+    check_path_within_current_wd(path, call = parent.frame())
+  }
 
   if (!fs::is_file(path) || !fs::file_exists(path)) {
     cli::cli_abort(
@@ -170,11 +183,12 @@ btw_tool_files_read_text_file_impl <- function(
 
   if (!isTRUE(is_text_file(path))) {
     cli::cli_abort(
-      "Path {.path {path}} is not a path to a text file."
+      "Path {.path {path}} is not a path to a text file.",
+      call = parent.frame()
     )
   }
 
-  contents <- readLines(path, warn = FALSE, n = line_end)
+  contents <- read_lines(path, n = line_end)
   contents <- contents[seq(max(line_start, 1), min(line_end, length(contents)))]
 
   value <- md_code_block(fs::path_ext(path), contents)
@@ -186,13 +200,36 @@ btw_tool_files_read_text_file_impl <- function(
       path = fs::path_rel(path),
       display = list(
         markdown = value,
-        title = HTML(sprintf(
-          "Read <code>%s</code>",
-          fs::path_file(path)
-        ))
+        title = HTML(title_with_open_file_button("Read", path))
       )
     )
   )
+}
+
+title_with_open_file_button <- function(verb, path) {
+  path_file <- fs::path_file(path)
+
+  icon <- tool_icon("codicons/go-to-file")
+
+  if (rstudioapi::hasFun("navigateToFile")) {
+    res <- glue_(
+      r"(
+      {{verb}}
+      <code>{{path_file}}</code>
+      <bslib-tooltip placement="top">
+        <template>Go to file</template>
+        <button class="btw-open-file btn btn-sm border-0"
+         data-path="{{path}}"
+         aria-label="Go to {{path_file}} in your IDE"
+         style="display: var(--_display, none);"
+        >{{ icon }}</button>
+      </bslib-tooltip>
+      )"
+    )
+  } else {
+    res <- glue_('{{verb}} <code>{{path_file}}</code>')
+  }
+  HTML(res)
 }
 
 BtwTextFileToolResult <- S7::new_class(
@@ -205,7 +242,15 @@ BtwTextFileToolResult <- S7::new_class(
   group = "files",
   tool = function() {
     ellmer::tool(
-      btw_tool_files_read_text_file_impl,
+      function(path, line_start = 1, line_end = 1000) {
+        btw_tool_files_read_text_file_impl(
+          path = path,
+          line_start = line_start,
+          line_end = line_end,
+          # LLM tool calls should be restricted to the working directory
+          check_within_wd = TRUE
+        )
+      },
       name = "btw_tool_files_read_text_file",
       description = "Read an entire text file.",
       annotations = ellmer::tool_annotations(
@@ -292,10 +337,11 @@ check_path_exists <- function(path) {
   }
 }
 
-check_path_within_current_wd <- function(path) {
+check_path_within_current_wd <- function(path, call = parent.frame()) {
   if (!fs::path_has_parent(path, getwd())) {
     cli::cli_abort(
-      "You are not allowed to list or read files outside of the project directory. Make sure that `path` is relative to the current working directory."
+      "You are not allowed to list or read files outside of the project directory. Make sure that `path` is relative to the current working directory.",
+      call = call
     )
   }
 }
@@ -385,7 +431,7 @@ is_common_ignorable_files <- function(paths) {
 #'
 #' @return Returns a message confirming the file was written.
 #'
-#' @family Tools
+#' @family files tools
 #' @export
 btw_tool_files_write_text_file <- function(path, content, `_intent`) {}
 
@@ -406,11 +452,9 @@ btw_tool_files_write_text_file_impl <- function(path, content) {
     fs::dir_create(dir_path, recurse = TRUE)
   }
 
-  previous_content <- if (fs::file_exists(path)) {
-    paste(readLines(path, warn = FALSE), collapse = "\n")
-  }
+  previous_content <- if (fs::file_exists(path)) read_file(path)
 
-  writeLines(content, path)
+  write_file(content, path)
 
   BtwWriteFileToolResult(
     "Success",
@@ -420,7 +464,7 @@ btw_tool_files_write_text_file_impl <- function(path, content) {
       previous_content = previous_content,
       display = list(
         markdown = md_code_block(fs::path_ext(path), content),
-        title = HTML(sprintf("Write <code>%s</code>", path)),
+        title = HTML(title_with_open_file_button("Write", path)),
         show_request = FALSE,
         icon = tool_icon("file-save")
       )
@@ -432,6 +476,40 @@ BtwWriteFileToolResult <- S7::new_class(
   "BtwWriteFileToolResult",
   parent = BtwToolResult
 )
+
+S7::method(contents_shinychat, BtwWriteFileToolResult) <- function(content) {
+  res <- shinychat::contents_shinychat(
+    S7::super(content, ellmer::ContentToolResult)
+  )
+
+  if (!is_installed("diffviewer")) {
+    cli::cli_warn(
+      "Install the {.pkg diffviewer} package for rich file diffs in {.fn btw::btw_app}: {.run install.packages('diffviewer')}",
+      call = quote(btw_tool_files_write_text_file),
+      .frequency = "once",
+      .frequency_id = "btw-tool-files-write-text-file-diffviewer"
+    )
+    return(res)
+  }
+
+  new <- content@extra$content
+  old <- content@extra$previous_content
+
+  dir <- withr::local_tempdir()
+  path_ext <- fs::path_ext(content@extra$path)
+  path_file <- fs::path_ext_remove(fs::path_file(content@extra$path))
+
+  path_old <- fs::path(dir, sprintf("%s", path_file), ext = path_ext)
+  path_new <- fs::path(dir, sprintf("%s.new", path_file), ext = path_ext)
+
+  write_file(old %||% "", path_old)
+  write_file(new %||% "", path_new)
+
+  res$value <- diffviewer::visual_diff(path_old, path_new)
+  res$value_type <- "html"
+  res$class <- "btw-tool-result-write-file"
+  res
+}
 
 .btw_add_to_tools(
   name = "btw_tool_files_write_text_file",

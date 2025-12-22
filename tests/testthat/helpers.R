@@ -15,10 +15,11 @@ use_latest_pandoc <- function(.envir = parent.frame()) {
   pandoc::pandoc_activate(v, quiet = TRUE)
 }
 
-skip_if_not_macos <- function() {
+skip_if_not_snapshot_env <- function() {
   # Skip helper: snapshots only on macos for now
   skip_on_os("windows")
   skip_on_os("linux")
+  skip_if_not_installed("ellmer", "0.4.0")
 }
 
 expect_btw_tool_result <- function(
@@ -86,18 +87,52 @@ with_mocked_platform <- function(
 # Helper to enable tools that are conditionally registered
 local_enable_tools <- function(
   has_chromote = TRUE,
+  has_devtools = TRUE,
+  has_roxygen2 = TRUE,
   rstudioapi_has_source_editor_context = TRUE,
   btw_can_register_git_tool = TRUE,
   btw_can_register_gh_tool = TRUE,
+  btw_can_register_run_r_tool = TRUE,
   .env = caller_env()
 ) {
   local_mocked_bindings(
     has_chromote = function() has_chromote,
+    has_devtools = function() has_devtools,
+    has_roxygen2 = function() has_roxygen2,
     rstudioapi_has_source_editor_context = function() {
       rstudioapi_has_source_editor_context
     },
     btw_can_register_git_tool = function() btw_can_register_git_tool,
     btw_can_register_gh_tool = function() btw_can_register_gh_tool,
+    btw_can_register_run_r_tool = function() btw_can_register_run_r_tool,
+    .env = .env
+  )
+}
+
+local_sessioninfo_quarto_version <- function(.env = caller_env()) {
+  local_mocked_bindings(
+    get_quarto_version = function() "99.9.9 @ /Applications/quarto/bin/quarto",
+    .package = "sessioninfo",
+    .env = .env
+  )
+}
+
+local_skip_pandoc_convert_text <- function(.env = caller_env()) {
+  local_mocked_bindings(
+    pandoc_convert_text = function(text, ...) {
+      # Skip actual pandoc conversion for speed
+      text
+    },
+    .env = .env
+  )
+}
+
+local_skip_pandoc_convert <- function(.env = caller_env()) {
+  local_mocked_bindings(
+    pandoc_convert = function(path, ...) {
+      # Skip actual pandoc conversion for speed
+      read_file(path)
+    },
     .env = .env
   )
 }

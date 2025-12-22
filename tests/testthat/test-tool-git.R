@@ -244,6 +244,7 @@ test_that("btw_tool_git_branch_checkout()", {
 test_that("git tools are registered only when in a git repo", {
   skip_if_not_installed("gert")
   local_mocked_bindings(
+    has_chromote = function() TRUE,
     btw_can_register_gh_tool = function() FALSE
   )
 
@@ -266,7 +267,8 @@ test_that("git tools require gert to be installed", {
   local_temp_git_repo()
 
   local_mocked_bindings(
-    is_installed = function(pkg) pkg != "gert"
+    is_installed = function(pkg) pkg != "gert",
+    find_package_candidates = function(...) character()
   )
 
   expect_error(

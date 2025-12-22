@@ -2,7 +2,7 @@
 #'
 #' @description
 #' The `btw_tools()` function provides a list of tools that can be registered
-#' with an ellmer chat via `chat$set_tools()` that allow the chat to
+#' with an ellmer chat via `chat$register_tools()` that allow the chat to
 #' interface with your computational environment. Chats returned by
 #' this function have access to the tools:
 #'
@@ -13,13 +13,13 @@
 #' ch <- ellmer::chat_anthropic()
 #'
 #' # register all of the available tools
-#' ch$set_tools(btw_tools())
+#' ch$register_tools(btw_tools())
 #'
 #' # or register only the tools related to fetching documentation
-#' ch$set_tools(btw_tools("docs"))
+#' ch$register_tools(btw_tools("docs"))
 #'
 #' # ensure that the current tools persist
-#' ch$set_tools(c(ch$get_tools(), btw_tools()))
+#' ch$register_tools(c(ch$get_tools(), btw_tools()))
 #'
 #' @param ... Optional names of tools or tool groups to include when registering
 #'   tools. By default all btw tools are included. For example, use `"docs"` to
@@ -38,15 +38,16 @@
 #' @returns Registers the tools with `chat`, updating the `chat` object in
 #'   place. The `chat` input is returned invisibly.
 #'
-#' @family Tools
 #' @export
 btw_tools <- function(...) {
   tools <- c(...)
   check_character(tools, allow_null = TRUE)
 
   if (length(tools) == 0) {
+    withr::local_options(.btw_tools.match_mode = "all")
     tools <- names(.btw_tools)
   } else {
+    withr::local_options(.btw_tools.match_mode = "explicit")
     tool_names <- map_chr(.btw_tools, function(x) x$name)
     tool_groups <- map_chr(.btw_tools, function(x) x$group)
 
@@ -135,10 +136,12 @@ tool_group_icon <- function(group, default = NULL) {
     group,
     "docs" = tool_icon("dictionary"),
     "env" = tool_icon("source-environment"),
+    "eval" = tool_icon("play-circle"),
     "files" = tool_icon("folder-open"),
     "git" = tool_icon("git"),
     "github" = tool_icon("github"),
     "ide" = tool_icon("code-blocks"),
+    "pkg" = tool_icon("package"),
     "search" = tool_icon("search"),
     "session" = tool_icon("screen-search-desktop"),
     "web" = tool_icon("globe-book"),
@@ -162,9 +165,8 @@ tool_icon <- local({
       return(icons[[name]])
     }
 
-    icon <- HTML(readLines(
-      fs::path_package("btw", "icons", paste0(name, ".svg")),
-      warn = FALSE
+    icon <- HTML(read_file(
+      fs::path_package("btw", "icons", paste0(name, ".svg"))
     ))
     icons[[name]] <<- icon
     return(icon)

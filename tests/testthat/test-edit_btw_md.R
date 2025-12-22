@@ -18,7 +18,7 @@ test_that("use_btw_md() creates btw.md in project scope", {
   expect_true(fs::file_exists(path))
 
   # Check content has YAML frontmatter
-  content <- readLines("btw.md")
+  content <- read_lines("btw.md")
   expect_match(content[1], "^---$")
   expect_match(content[2], "^client:")
   expect_match(content[3], "^tools:")
@@ -30,6 +30,9 @@ test_that("use_btw_md() creates btw.md in user scope", {
   local_mocked_bindings(
     path_home = function(...) fs::path(wd, ...),
     .package = "fs"
+  )
+  local_mocked_bindings(
+    use_build_ignore_btw_md = function(...) invisible()
   )
 
   expect_snapshot(
@@ -62,6 +65,10 @@ test_that("use_btw_md() creates AGENTS.md with correct template", {
   wd <- withr::local_tempdir()
   withr::local_dir(wd)
 
+  local_mocked_bindings(
+    use_build_ignore_btw_md = function(...) invisible()
+  )
+
   expect_snapshot(
     path <- use_btw_md("AGENTS.md")
   )
@@ -70,7 +77,7 @@ test_that("use_btw_md() creates AGENTS.md with correct template", {
   expect_equal(basename(path), "AGENTS.md")
 
   # Check content does NOT have YAML frontmatter
-  content <- readLines("AGENTS.md")
+  content <- read_lines("AGENTS.md")
   expect_false(any(grepl("^---$", content)))
   expect_false(any(grepl("client:", content)))
   expect_true(any(grepl("tidyverse", content)))
@@ -80,13 +87,17 @@ test_that("use_btw_md() does not overwrite existing file", {
   wd <- withr::local_tempdir()
   withr::local_dir(wd)
 
-  writeLines("existing content", "btw.md")
+  local_mocked_bindings(
+    use_build_ignore_btw_md = function(...) invisible()
+  )
+
+  write_file("existing content", "btw.md")
 
   expect_snapshot(
     path <- use_btw_md("btw.md")
   )
 
-  content <- readLines("btw.md")
+  content <- read_file("btw.md")
   expect_equal(content, "existing content")
 })
 
@@ -98,15 +109,17 @@ test_that("use_btw_md() adds to .Rbuildignore in R package", {
 
   # Create a package structure
   writeLines("Package: testpkg", "DESCRIPTION")
-  usethis::local_project(wd)
+  usethis::ui_silence({
+    usethis::with_project(wd, {
+      suppressMessages(path <- use_btw_md("project"))
 
-  suppressMessages(path <- use_btw_md("project"))
-
-  # Check .Rbuildignore was created and contains btw.md
-  if (fs::file_exists(".Rbuildignore")) {
-    buildignore <- readLines(".Rbuildignore")
-    expect_match(buildignore, "btw\\.md", fixed = TRUE)
-  }
+      # Check .Rbuildignore was created and contains btw.md
+      if (fs::file_exists(".Rbuildignore")) {
+        buildignore <- read_file(".Rbuildignore")
+        expect_match(buildignore, "btw\\.md", fixed = TRUE)
+      }
+    })
+  })
 })
 
 test_that("use_btw_md() handles .Rbuildignore even when file exists", {
@@ -117,18 +130,21 @@ test_that("use_btw_md() handles .Rbuildignore even when file exists", {
 
   # Create a package structure
   writeLines("Package: testpkg", "DESCRIPTION")
-  usethis::local_project(wd)
 
   # Create existing btw.md
   writeLines("existing", "btw.md")
 
   # Should still add to .Rbuildignore
-  suppressMessages(use_btw_md("project"))
+  usethis::ui_silence({
+    usethis::with_project(wd, {
+      suppressMessages(use_btw_md("project"))
 
-  if (fs::file_exists(".Rbuildignore")) {
-    buildignore <- readLines(".Rbuildignore")
-    expect_match(buildignore, "btw\\.md", fixed = TRUE)
-  }
+      if (fs::file_exists(".Rbuildignore")) {
+        buildignore <- read_file(".Rbuildignore")
+        expect_match(buildignore, "btw\\.md", fixed = TRUE)
+      }
+    })
+  })
 })
 
 test_that("edit_btw_md() errors if file doesn't exist", {
@@ -247,7 +263,7 @@ test_that("btw_md_template() selects correct template", {
   # btw.md template
   template <- btw_md_template("btw.md")
   expect_true(fs::file_exists(template))
-  expect_match(basename(template), "btw\\.md")
+  expect_match(basename(template), "^btw.*\\.md$")
 
   # AGENTS.md template
   template <- btw_md_template("AGENTS.md")
@@ -256,5 +272,5 @@ test_that("btw_md_template() selects correct template", {
 
   # Custom name gets btw.md template
   template <- btw_md_template("custom.md")
-  expect_match(basename(template), "btw\\.md")
+  expect_match(basename(template), "^btw.*\\.md$")
 })

@@ -16,7 +16,7 @@ NULL
 #' @examples
 #' btw_tool_session_platform_info()
 #'
-#' @family Tools
+#' @family session tools
 #' @export
 btw_tool_session_platform_info <- function(`_intent`) {}
 
@@ -71,13 +71,12 @@ platform_info <- function() {
   platform$pandoc <- NULL
   platform$quarto <- NULL
 
-  if (identical(Sys.getenv("POSITRON"), "1")) {
-    platform$ui <- "Positron (a VS Code equivalent)"
-  } else if (identical(Sys.getenv("RSTUDIO"), "1")) {
-    platform$ui <- "RStudio"
-  } else if (identical(Sys.getenv("TERM_PROGRAM"), "vscode")) {
-    platform$ui <- "VS Code"
-  }
+  platform$ui <- switch(
+    which_ide() %||% "",
+    positron = "Positron (a VS Code equivalent)",
+    rstudio = "RStudio",
+    vs_code = "VS Code"
+  )
 
   recode <- c(
     "version" = "r_version",
@@ -114,7 +113,7 @@ platform_info <- function() {
 #' @returns Returns a string describing the selected packages.
 #'
 #' @seealso [btw_tools()], [btw_tool_session_platform_info()]
-#' @family Tools
+#' @family session tools
 #' @export
 btw_tool_session_package_info <- function(packages, dependencies, `_intent`) {}
 

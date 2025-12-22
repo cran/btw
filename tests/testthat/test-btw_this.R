@@ -1,11 +1,13 @@
 use_latest_pandoc()
 
 test_that("btw_this.function()", {
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
   expect_snapshot(cli::cat_line(btw_this(dplyr::mutate)))
 })
 
 test_that("btw_this('{pkg}')", {
+  local_skip_pandoc_convert()
+
   # Gets the intro vignette if one is available
   expect_equal(
     btw_this("{dplyr}"),
@@ -72,6 +74,8 @@ test_that('btw_this("@last_value")', {
 # Test @pkg command -----------------------------------------------------------
 
 test_that("@pkg command works like {pkg} syntax", {
+  local_skip_pandoc_convert()
+
   # Both syntaxes should produce identical results
   expect_equal(
     btw_this("@pkg dplyr"),
@@ -379,7 +383,7 @@ test_that("@issue detects current repo when only number provided", {
   expect_match(result, "Test Issue")
   expect_match(result, "Test body")
 
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
   expect_snapshot(cli::cat_line(result))
 })
 
@@ -415,7 +419,7 @@ test_that("@pr marks pull requests correctly", {
   expect_match(result, "Pull Request")
   expect_match(result, "merged: 2025-01-02T00:00:00Z")
 
-  skip_if_not_macos()
+  skip_if_not_snapshot_env()
   expect_snapshot(cli::cat_line(result))
 })
 
@@ -445,6 +449,8 @@ test_that("format_github_item handles empty body", {
 # Test backward compatibility -------------------------------------------------
 
 test_that("legacy {pkg} syntax still works", {
+  local_skip_pandoc_convert()
+
   expect_equal(
     btw_this("{dplyr}"),
     c(
@@ -456,6 +462,8 @@ test_that("legacy {pkg} syntax still works", {
 })
 
 test_that("legacy ?topic syntax still works", {
+  local_skip_pandoc_convert()
+
   expect_equal(
     btw_this(?dplyr::mutate),
     btw_this("?dplyr::mutate")
@@ -499,6 +507,8 @@ test_that("@unknown_with_args returns user prompt", {
 # Test @ command edge cases ---------------------------------------------------
 
 test_that("@ commands handle extra whitespace", {
+  local_skip_pandoc_convert()
+
   expect_equal(
     btw_this("@pkg  dplyr"), # Extra space
     btw_this("@pkg dplyr")
@@ -572,4 +582,97 @@ test_that("@url requires URL", {
     btw_this("@url "),
     "@url.*must be followed by a valid URL"
   )
+})
+
+# Test file paths outside working directory (user-provided) ------------------
+
+test_that("btw_this() allows file paths outside working directory for list files", {
+  # Create a temp directory structure:
+  # temp_root/
+  #   working_dir/
+  #   outside_dir/
+  #     test.txt
+  temp_root <- withr::local_tempdir()
+  outside_dir <- file.path(temp_root, "outside_dir")
+  dir.create(outside_dir)
+  working_dir <- file.path(temp_root, "working_dir")
+  dir.create(working_dir)
+
+  # Create a test file in outside_dir
+  test_file <- file.path(outside_dir, "test.txt")
+  writeLines("test content", test_file)
+
+  # Set working directory to working_dir
+  withr::local_dir(working_dir)
+
+  # Now we can use a relative path to access outside_dir
+  # This should work because btw_this() calls with check_within_wd = FALSE
+  result <- btw_this("./../outside_dir")
+
+  # Should successfully list files
+  expect_true(is.character(result))
+  expect_match(result, "test.txt", all = FALSE)
+})
+
+test_that("btw_this() allows file paths outside working directory for reading files", {
+  # Create a temp directory structure:
+  # temp_root/
+  #   working_dir/
+  #   outside.txt
+  temp_root <- withr::local_tempdir()
+  working_dir <- file.path(temp_root, "working_dir")
+  dir.create(working_dir)
+
+  # Create a test file in temp_root
+  test_file <- file.path(temp_root, "outside.txt")
+  writeLines(c("line 1", "line 2", "line 3"), test_file)
+
+  # Set working directory to working_dir
+  withr::local_dir(working_dir)
+
+  # Now we can use a relative path to access the file outside working_dir
+  # This should work because btw_this() calls with check_within_wd = FALSE
+  result <- btw_this("./../outside.txt")
+
+  # Should successfully read the file
+  expect_true(is.character(result))
+  expect_match(result, "line 1", all = FALSE)
+  expect_match(result, "line 2", all = FALSE)
+  expect_match(result, "line 3", all = FALSE)
+})
+
+# Test matrix handling --------------------------------------------------------
+
+test_that("btw_this.matrix() correctly handles numeric matrices (issue #139)", {
+  m_num <- matrix(
+    # fmt: skip
+    c(0.82, 0.10, -0.34,
+      0.10, 0.55, 0.22,
+     -0.34, 0.22, 0.91),
+    nrow = 3,
+    byrow = TRUE
+  )
+
+  result <- btw_this(m_num)
+
+  expect_true(is.character(result))
+  expect_s3_class(result, "btw_captured")
+  expect_snapshot(writeLines(btw_this(m_num)))
+})
+
+test_that("btw_this.matrix() correctly handles character matrices (issue #139)", {
+  m_char <- matrix(
+    # fmt: skip
+    c("0.82*", "0.10", "-0.34*",
+      "0.10", "0.55**", "0.22",
+      "-0.34*", "0.22", "0.91***"),
+    nrow = 3,
+    byrow = TRUE
+  )
+
+  result <- btw_this(m_char)
+
+  expect_true(is.character(result))
+  expect_s3_class(result, "btw_captured")
+  expect_snapshot(writeLines(btw_this(m_char)))
 })
