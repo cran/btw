@@ -9,7 +9,9 @@ btw_tool_run_r(code, `_intent` = "")
 \arguments{
 \item{code}{A character string containing R code to run.}
 
-\item{_intent}{Intent description (automatically added by ellmer).}
+\item{_intent}{An optional string describing the intent of the tool use.
+When the tool is used by an LLM, the model will use this argument to
+explain why it called the tool.}
 }
 \value{
 A list of ellmer Content objects:
@@ -41,7 +43,7 @@ execution. Can be a character string of the form \code{"w:h"} (e.g., \code{"16:9
 or a numeric value representing width/height (e.g., \code{16/9}). Default is
 \code{"3:2"}.
 \item \code{btw.run_r.plot_size}: Integer pixel size for the longest side of plots.
-Default is \code{768L}. This image size was selected to match \href{https://platform.openai.com/docs/guides/images-vision?api-mode=responses}{OpenAI's image resizing rules},
+Default is \code{768L}. This image size was selected to match \href{https://developers.openai.com/api/docs/guides/images-vision}{OpenAI's image resizing rules},
 where images are resized such that the largest size is 768px. Another
 common choice is 512px. Larger images may be used but will result in
 increased token sizes.

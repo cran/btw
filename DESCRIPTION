@@ -1,6 +1,6 @@
 Package: btw
 Title: A Toolkit for Connecting R and Large Language Models
-Version: 1.1.0
+Version: 1.2.0
 Authors@R: c(
     person("Garrick", "Aden-Buie", , "garrick@adenbuie.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-7111-0077")),
@@ -28,35 +28,41 @@ Description: A complete toolkit for connecting 'R' environments with Large
 License: MIT + file LICENSE
 URL: https://github.com/posit-dev/btw, https://posit-dev.github.io/btw/
 BugReports: https://github.com/posit-dev/btw/issues
-Depends: R (>= 4.1.0)
-Imports: brio, cli, clipr, dplyr, ellmer (>= 0.3.0), fs, jsonlite,
-        lifecycle, mcptools, pkgsearch, rlang (>= 1.1.0), rmarkdown,
-        rstudioapi, S7, sessioninfo, skimr, tibble, utils, withr, xml2
-Suggests: bslib (>= 0.7.0), chromote, covr, DBI, devtools, diffviewer,
-        duckdb, evaluate, fansi, gert, gh, htmltools, pandoc, pkgload,
-        ragg, roxygen2, shiny, shinychat (>= 0.3.0), testthat (>=
-        3.0.0), usethis
-Config/Needs/website: tidyverse/tidytemplate
+Depends: R (>= 4.2.0)
+Imports: brio, cli, clipr, dplyr, ellmer (>= 0.3.0), frontmatter, fs,
+        jsonlite, lifecycle, mcptools, pkgsearch, rlang (>= 1.1.0),
+        rmarkdown, rstudioapi, S7, sessioninfo, skimr, utils, withr,
+        xml2
+Suggests: bslib (>= 0.7.0), callr, chromote, covr, DBI, devtools,
+        diffviewer, duckdb, evaluate, fansi, gert, gh, htmltools,
+        pandoc, pkgload, processx, ragg, Rapp (>= 0.3.0), roxygen2,
+        shiny, shinychat (>= 0.3.0), testthat (>= 3.0.0), tibble,
+        usethis
+Config/Needs/website: brand.yml, tidyverse/tidytemplate
 Config/testthat/edition: 3
 Config/testthat/parallel: true
 Config/testthat/start-first: web, news, covr, search
 Encoding: UTF-8
 RoxygenNote: 7.3.3
 Collate: 'aaa-tools.R' 'addins.R' 'btw-package.R' 'btw.R'
-        'btw_client.R' 'btw_client_app.R' 'btw_this.R' 'clipboard.R'
-        'edit_btw_md.R' 'import-standalone-obj-type.R'
-        'import-standalone-purrr.R' 'import-standalone-types-check.R'
-        'mcp.R' 'task_create_btw_md.R' 'task_create_readme.R'
-        'tool-result.R' 'tool-docs-news.R' 'tool-docs.R'
-        'tool-env-df.R' 'tool-env.R' 'tool-files-code-search.R'
-        'tool-files.R' 'tool-git.R' 'tool-github.R' 'tool-ide.R'
-        'tool-pkg-covr.R' 'tool-pkg-devtools.R' 'tool-run.R'
-        'tool-search-packages.R' 'tool-session-info.R'
-        'tool-session-package-installed.R' 'tool-web.R' 'tools.R'
-        'utils-ellmer.R' 'utils-gitignore.R' 'utils-ide.R' 'utils-md.R'
-        'utils-r.R' 'utils.R' 'zzz.R'
+        'btw_client.R' 'btw_client_app.R' 'btw_task.R' 'btw_this.R'
+        'cli.R' 'clipboard.R' 'deprecated.R' 'edit_btw_md.R'
+        'import-standalone-obj-type.R' 'import-standalone-purrr.R'
+        'import-standalone-types-check.R' 'mcp.R'
+        'task_create_btw_md.R' 'task_create_readme.R'
+        'task_create_skill.R' 'tool-result.R' 'tool-agent-subagent.R'
+        'tool-agent-custom.R' 'tool-cran.R' 'tool-docs-news.R'
+        'tool-docs.R' 'tool-env-df.R' 'tool-env.R' 'tool-files-edit.R'
+        'tool-files-list.R' 'tool-files-read.R' 'tool-files-replace.R'
+        'tool-files-search.R' 'tool-files-write.R' 'tool-git.R'
+        'tool-github.R' 'tool-ide.R' 'tool-pkg-covr.R'
+        'tool-pkg-devtools.R' 'tool-run.R'
+        'tool-session-package-installed.R' 'tool-sessioninfo.R'
+        'tool-skills.R' 'tool-web.R' 'tools.R' 'utils-ellmer.R'
+        'utils-gitignore.R' 'utils-ide.R' 'utils-md.R' 'utils-r.R'
+        'utils.R' 'zzz.R'
 NeedsCompilation: no
-Packaged: 2025-12-22 23:02:31 UTC; garrick
+Packaged: 2026-03-16 19:37:26 UTC; garrick
 Author: Garrick Aden-Buie [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-7111-0077>),
   Simon Couch [aut] (ORCID: <https://orcid.org/0000-0001-5676-5107>),
@@ -67,4 +73,4 @@ Author: Garrick Aden-Buie [aut, cre] (ORCID:
   Jamie Perkins [cph] (countUp.js author)
 Maintainer: Garrick Aden-Buie <garrick@adenbuie.com>
 Repository: CRAN
-Date/Publication: 2025-12-22 23:20:02 UTC
+Date/Publication: 2026-03-16 21:30:02 UTC

@@ -35,6 +35,11 @@ shiny-chat-message .message-icon {
   background-color: var(--bs-body-bg);
 }
 
+.modal-body bslib-code-editor > .code-editor,
+.modal-body textarea {
+  border: 0;
+}
+
 /* ---------------- Status Bar ---------------- */
 .btw-status-recalculating {
   animation: blink 2s infinite;
@@ -73,6 +78,13 @@ shiny-chat-message .message-icon {
 /* ---------------- Tool Results ---------------- */
 .btw-tool-result-write-file > .card > .card-body {
   padding: 0;
+}
+
+.collapse-toggle-btn[aria-expanded=true] > .collapse-indicator {
+  transform: rotate(-90deg);
+}
+.collapse-toggle-btn[aria-expanded=true] > .collapse-indicator .horizontal {
+  transform: scale(0);
 }
 
 .btw-in-ide .btw-open-file.btn {
