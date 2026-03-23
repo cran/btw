@@ -1,8 +1,8 @@
-3e092c1c22eebe6753bfde9a442fadbf *DESCRIPTION
+faaec96b219d39dd2dc934e12260059d *DESCRIPTION
 0d37e729582c25a6fc726cf9f8763140 *LICENSE
 4be6422f5cccda189135760668eaba46 *LICENSE.note
 3999f8e0ff0d306347bd764538239be5 *NAMESPACE
-4ebb0df019ac26ec40371d286ef403df *NEWS.md
+820a17f156c86a7e5b72aba0431f7e81 *NEWS.md
 862fdc154674bf660dd8378011eb27bb *R/aaa-tools.R
 cd0b3056c78a5b7e1502faed14a839c6 *R/addins.R
 e6e9598beea1b56a38f3930273ce074b *R/btw-package.R
@@ -14,7 +14,7 @@ cb72b6526faa510ae12c4b635270c6e0 *R/btw_this.R
 3a79b6bcee6f3175b648656299739076 *R/cli.R
 882fdd87e40cc5f1ba5a9895d91c0f40 *R/clipboard.R
 390b19526600126628ef2d6ed17d98e7 *R/deprecated.R
-fa1aae70e2461472257d81bf4e158472 *R/edit_btw_md.R
+3ca77981b90f4cbb600a514b02234b49 *R/edit_btw_md.R
 799bdb3344a8c0c98ff29fa5f7055f01 *R/import-standalone-obj-type.R
 606cca4147dc649899e14eeb9684e25f *R/import-standalone-purrr.R
 62545d8f97ad53b42ec2efcbde7de6bc *R/import-standalone-types-check.R
@@ -30,10 +30,10 @@ f6c37fdf107e6b742aa695cf6b60029c *R/tool-cran.R
 6b7887ff9e47dda60da2e2c7f3cfd3c8 *R/tool-docs.R
 1fee824a085e0d680486f89fc4f75cfb *R/tool-env-df.R
 1a9f46932be6ac4d9e8ffe9926238a91 *R/tool-env.R
-08a165e67157aaa534ac94c69d1ccb83 *R/tool-files-edit.R
+5957332fde2e716501b0d09749dce589 *R/tool-files-edit.R
 bcb1bd5a7a198372d6bdc57649d635e3 *R/tool-files-list.R
-a61d741148d9f8d940733daa9423efbd *R/tool-files-read.R
-e8f75812867a904dd4884cac33863472 *R/tool-files-replace.R
+9dcb8ef91e38342f313b8785751569b4 *R/tool-files-read.R
+670510b7b6713891f6270d5644ffa934 *R/tool-files-replace.R
 ac0356c3217375c9366d4fd259479f00 *R/tool-files-search.R
 56893b4a454e8427e923eefd6ac24716 *R/tool-files-write.R
 a04cfe95eff0380002d5194b15371092 *R/tool-git.R
@@ -45,7 +45,7 @@ af6c422f463f982b4adb1841a8726ae6 *R/tool-pkg-devtools.R
 8988f6b41df96c3835b3446976b0fd84 *R/tool-run.R
 f9e7a1e25aa5175694b56638b957186a *R/tool-session-package-installed.R
 501c9f3b11f4ea936cdc30e8fad517a1 *R/tool-sessioninfo.R
-200536a32c9e7796114d36510973ab3e *R/tool-skills.R
+53f1ca369780c41c2802d8cedca5cfd9 *R/tool-skills.R
 11ad5036433c52b71abbe8026a93b76d *R/tool-web.R
 8dc9fdbebc8b1abae1115a48a9c4f0e2 *R/tools.R
 b29017de34127b623fc7b8d0a2b00577 *R/utils-ellmer.R
@@ -53,10 +53,10 @@ b29017de34127b623fc7b8d0a2b00577 *R/utils-ellmer.R
 334be606d634ee0e83924675b56d4df3 *R/utils-ide.R
 acda5d31accb528ad1224790c0ad04bb *R/utils-md.R
 43db150a02e1fd6802b999240bd4acac *R/utils-r.R
-e934777aa07a7a2b557099b92333de63 *R/utils.R
+8dcd032d925c2b64dd9348d90d242f60 *R/utils.R
 9c0258a6b0123fe4dffa885838767898 *R/zzz.R
 2a5fcdeb23189ae43a741d4b70ffde1a *README.md
-120cb916c5c87fe9c24654ad972741ee *exec/btw.R
+35d4c9bc9bac42a973488bbc03ed8e08 *exec/btw.R
 cafc1042c7ccd10f7555b3baa38d181c *inst/WORDLIST
 8302601fea12080ba50592790eb1ec90 *inst/cli-skill/r-btw-cli/SKILL.md
 3b83ef96387f14655fc854ddc3c6bd57 *inst/icons/LICENSE
@@ -112,8 +112,8 @@ eec4494a61533e336ded0615b77dfde1 *man/btw-package.Rd
 632e101befc350443dd80f111a445523 *man/btw.Rd
 db53ed020515d7ceba036bc1955bd791 *man/btw_agent_tool.Rd
 1d5827033d43e3e5c694d7102cffd09a *man/btw_client.Rd
-db3705851ecb5a26e898b9aaee4e1624 *man/btw_skill_install_github.Rd
-5d221caa63ea44ccdecdc35f13df8b5d *man/btw_skill_install_package.Rd
+96dc7c7d7d585115ab89e3d4cc9f642c *man/btw_skill_install_github.Rd
+0049d71e541a06716b2a3c4fe8124c9c *man/btw_skill_install_package.Rd
 2e1284288c023da9e2e54fc764623daa *man/btw_task.Rd
 cb7d96afa03a7cb7b32a939edd5359fe *man/btw_task_create_btw_md.Rd
 2c5f7372dbb07449c0f3e10bbfee7484 *man/btw_task_create_readme.Rd
@@ -128,10 +128,10 @@ dca2187385ec25569c6a88ed1c10813d *man/btw_tool_cran_search.Rd
 fdb538f7bdddfec4686e6ca7b1db7c73 *man/btw_tool_docs_package_news.Rd
 25dc9247ef746486c7c54c419b613320 *man/btw_tool_env_describe_data_frame.Rd
 a17d3f436c6e7ae81f56937cd1a1bb9f *man/btw_tool_env_describe_environment.Rd
-3498bd20a07d93068eafa919493274a6 *man/btw_tool_files_edit.Rd
+4841e1eaddd0f3f7821d47d544109244 *man/btw_tool_files_edit.Rd
 75a6556b019f2082bbdc589570a4651f *man/btw_tool_files_list.Rd
-7605a67e42826a472f982e1543ab17e0 *man/btw_tool_files_read.Rd
-9d07708cad6d6a96d868f75846c741b2 *man/btw_tool_files_replace.Rd
+4321731eba3c0f743a547367a586da2b *man/btw_tool_files_read.Rd
+4c098ab17f8114554e4bbd89eb11b425 *man/btw_tool_files_replace.Rd
 472347e31ae12700daf9d6ba4ffc17a4 *man/btw_tool_files_search.Rd
 f5a88002bdb8cb3c8b5e32d0d947e536 *man/btw_tool_files_write.Rd
 74db51f3693f3f22e6caf9bde5f31e08 *man/btw_tool_git_branch_checkout.Rd
@@ -153,7 +153,7 @@ ef965fdfc14c651bd5788438a49c9a96 *man/btw_tool_pkg_document.Rd
 9800a1919284700b42f5f34c6994fd5a *man/btw_tool_sessioninfo_is_package_installed.Rd
 9ccfb484bec9c6622f797ccac41697b0 *man/btw_tool_sessioninfo_package.Rd
 782b0d3ef84d319dc34cc2ad0962eada *man/btw_tool_sessioninfo_platform.Rd
-bfd614d210e6b13c57b7e47c91ce6699 *man/btw_tool_skill.Rd
+37fb1ae25665e8c3d187325059f98470 *man/btw_tool_skill.Rd
 16efc2c5f9449591b91acce84a63d9fa *man/btw_tool_web_read_url.Rd
 230af6ac4831ab3b29ebe4e4dba134eb *man/btw_tools.Rd
 32075b913dd9a9538ee73219aeacac34 *man/deprecated.Rd
@@ -161,7 +161,7 @@ bfd614d210e6b13c57b7e47c91ce6699 *man/btw_tool_skill.Rd
 7880115d9d436d427b4bc97900f0bf5f *man/figures/logo.png
 4328fb602cda080f8dc754c68b39ec5f *man/install_btw_cli.Rd
 58a3be63ecc56e97e1cf9039de42d734 *man/mcp.Rd
-b14dbab226572cb5dc1991cac6112213 *man/use_btw_md.Rd
+56063eaa771b0b8d19270691b032f85d *man/use_btw_md.Rd
 f08a8d984852f41a271cabc70ac2608f *tests/testthat.R
 89813c8d98c3d73d891fc5e8e105d111 *tests/testthat/_snaps/btw.md
 8456d3d477d209a2695f74493bbe01e4 *tests/testthat/_snaps/btw_client.md
@@ -230,7 +230,7 @@ c7a60e6422300e73ca3d5a9e3feff241 *tests/testthat/test-tool-pkg-devtools-covr.R
 b131637393dbf807f40776e830d9b929 *tests/testthat/test-tool-session-package-installed.R
 80e6a96cfe3da9dc5b7f5552a30c2a82 *tests/testthat/test-tool-sessioninfo.R
 7ffd1d3e285337d2fbcea283c1c1b559 *tests/testthat/test-tool-web.R
-e447f6967c27f67e7968a1fef9557e70 *tests/testthat/test-tool_skills.R
+e48300e12ff2387563db5c09dc78af6b *tests/testthat/test-tool_skills.R
 312cc15afca77d18a76f8ddec6f5d93c *tests/testthat/test-tools.R
 33d9f882cee0a59cd6ba3e1c60ea470a *tests/testthat/test-utils-gitignore.R
 5a6520483354074592f74480d99d65c8 *tests/testthat/test-utils-md.R
