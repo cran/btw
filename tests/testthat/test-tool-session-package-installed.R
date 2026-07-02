@@ -5,6 +5,9 @@ test_that("btw_tool_sessioninfo_is_package_installed()", {
     },
     package_version = function(package_name) {
       "1.0.0"
+    },
+    find_package_candidates = function(package_name) {
+      if (tolower(package_name) == "dplyr") "dplyr" else character(0)
     }
   )
 

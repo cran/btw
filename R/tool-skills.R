@@ -29,6 +29,25 @@ NULL
 #'    by btw 1.2.0 is also included at lower priority.
 #' 4. Project-level skills (`.btw/skills/` or `.agents/skills/`)
 #'
+#' The default user-level and project-level directories can be replaced by
+#' setting the `btw.skills.paths` R option or the `BTW_SKILLS_PATHS` environment
+#' variable. When set, the value **entirely replaces** all user-level and project-level
+#' directories (items 3 and 4 above). Package-bundled skills and skills from
+#' attached packages (items 1 and 2) are always included regardless of this
+#' setting. The R option takes precedence over the environment variable.
+#' Multiple paths can be provided as a character vector (e.g.
+#' `options(btw.skills.paths = c("/path/a", "/path/b"))`) or as a single
+#' path-separator-delimited string (`:` on Unix/Mac, `;` on Windows, which is
+#' the only form supported by environment variables). Non-existent paths are
+#' silently skipped.
+#'
+#' **Resolution timing:** options and environment variables are read at
+#' **tool-registration time** (i.e. when [btw_tools()] or [btw_client()] is
+#' called). The resolved paths are captured in the tool's closure so that they
+#' remain correct even if the options are later modified or go out of scope
+#' (for example, when `btw_client()` restores options after returning). If you
+#' need different directories for a new session, create a new client.
+#'
 #' @param name The name of the skill to load, or `""` to list all available
 #'   skills.
 #' @inheritParams btw_tool_docs_package_news
@@ -117,8 +136,22 @@ btw_tool_skill_impl <- function(name) {
   group = "skills",
 
   tool = function() {
+    # Capture the resolved skill dir overrides at registration time so the
+    # tool closes over the correct paths even after options set transiently by
+    # btw_client() / btw_app() have been restored to their prior values.
+    captured_paths <- skill_dirs_from_option_or_envvar("btw.skills.paths", "BTW_SKILLS_PATHS")
+
+    # Only replay the options that were actually captured. When a captured
+    # value is NULL (nothing was set at registration time), leave the live
+    # option untouched so btw_skills_directories() sees the real environment.
+    impl <- function(name) {
+      opts <- list()
+      if (!is.null(captured_paths)) opts[["btw.skills.paths"]] <- captured_paths
+      withr::with_options(opts, btw_tool_skill_impl(name))
+    }
+
     ellmer::tool(
-      btw_tool_skill_impl,
+      impl,
       name = "btw_tool_skill",
       description = paste(
         "Load a skill's specialized instructions and list its bundled",
@@ -159,30 +192,69 @@ btw_skills_directories <- function(project_dir = getwd()) {
   # Skills from attached packages
   dirs <- c(dirs, attached_package_skill_dirs())
 
-  # Legacy: btw <= 1.2.0 install target — kept for backwards compatibility only,
-  # never written to by newer versions
-  legacy_skills_dir <- file.path(tools::R_user_dir("btw", "config"), "skills")
-  if (dir.exists(legacy_skills_dir)) {
-    dirs <- c(dirs, legacy_skills_dir)
-  }
+  # Custom paths entirely replace all user-level and project-level defaults.
+  # When not set, fall back to the standard user-level + project-level dirs.
+  custom_paths <- skill_dirs_from_option_or_envvar("btw.skills.paths", "BTW_SKILLS_PATHS")
 
-  # User-level skills from btw_user_dirs() in increasing priority order
-  for (user_dir in rev(btw_user_dirs())) {
-    user_skills_dir <- file.path(user_dir, "skills")
-    if (dir.exists(user_skills_dir) && !user_skills_dir %in% dirs) {
-      dirs <- c(dirs, user_skills_dir)
-    }
-  }
+  search_dirs <- custom_paths %||% c(
+    default_user_skill_dirs(),
+    default_project_skill_dirs(project_dir)
+  )
 
-  # Project-level skills from multiple conventions
-  for (project_subdir in project_skill_subdirs()) {
-    project_skills_dir <- file.path(project_dir, project_subdir)
-    if (dir.exists(project_skills_dir)) {
-      dirs <- c(dirs, project_skills_dir)
+  for (search_dir in search_dirs) {
+    if (dir.exists(search_dir) && !search_dir %in% dirs) {
+      dirs <- c(dirs, search_dir)
     }
   }
 
   dirs
+}
+
+skill_dirs_from_option_or_envvar <- function(option_name, envvar_name) {
+  raw <- getOption(option_name, default = NULL)
+  if (is.null(raw)) {
+    env_val <- Sys.getenv(envvar_name, unset = NA_character_)
+    if (is.na(env_val)) {
+      return(NULL)
+    }
+    raw <- env_val
+  }
+  # Accept either a character vector (idiomatic R / YAML array) or a
+  # path-separator-delimited string (useful from env vars).
+  if (length(raw) > 1) {
+    paths <- as.character(raw)
+  } else {
+    paths <- strsplit(as.character(raw), .Platform$path.sep, fixed = TRUE)[[1]]
+  }
+  paths <- paths[!is.na(paths) & nzchar(paths)]
+  normalizePath(paths, mustWork = FALSE)
+}
+
+default_user_skill_dirs <- function() {
+  # Legacy: btw <= 1.2.0 install target — kept for backwards compatibility only,
+  # never written to by newer versions. Listed first (lowest priority).
+  legacy_skills_dir <- file.path(tools::R_user_dir("btw", "config"), "skills")
+
+  # Current user-level skill dirs in increasing priority order
+  current_dirs <- rev(vapply(
+    btw_user_dirs(),
+    function(d) file.path(d, "skills"),
+    character(1)
+  ))
+
+  # Combine: legacy first, then current dirs in increasing priority order.
+  # The `%in%` guard in the calling loop prevents re-adding dirs already
+  # present from earlier sources (e.g. attached packages). `unique()` removes
+  # any duplicates within this vector itself before the loop sees them.
+  unique(c(legacy_skills_dir, current_dirs))
+}
+
+default_project_skill_dirs <- function(project_dir) {
+  vapply(
+    project_skill_subdirs(),
+    function(s) file.path(project_dir, s),
+    character(1)
+  )
 }
 
 attached_package_skill_dirs <- function() {
@@ -251,6 +323,7 @@ resolve_project_skill_dir <- function(error_call = caller_env()) {
 btw_skills_list <- function() {
   skill_dirs <- btw_skills_directories()
   all_skills <- list()
+  skill_problems <- list()
 
   for (dir in skill_dirs) {
     if (!dir.exists(dir)) {
@@ -267,21 +340,18 @@ btw_skills_list <- function() {
 
       validation <- validate_skill(subdir)
       if (!validation$valid) {
-        cli::cli_warn(c(
-          "Skipping invalid skill in {.path {subdir}}.",
-          set_names(validation$errors, rep("!", length(validation$errors)))
-        ))
+        skill_problems[[subdir]] <- list(
+          type = "error",
+          messages = c(validation$errors, validation$warnings)
+        )
         next
       }
 
       if (length(validation$warnings) > 0) {
-        cli::cli_warn(c(
-          "Skill in {.path {subdir}} has validation warnings.",
-          set_names(
-            validation$warnings,
-            rep("!", length(validation$warnings))
-          )
-        ))
+        skill_problems[[subdir]] <- list(
+          type = "warning",
+          messages = validation$warnings
+        )
       }
 
       metadata <- validation$metadata
@@ -308,6 +378,35 @@ btw_skills_list <- function() {
 
       all_skills[[skill_name]] <- skill_entry
     }
+  }
+
+  if (length(skill_problems) > 0) {
+    n_errors <- sum(
+      map_lgl(skill_problems, function(p) p$type == "error")
+    )
+    n_warnings <- length(skill_problems) - n_errors
+
+    header <- if (n_errors > 0 && n_warnings > 0) {
+      "{n_errors} skill{?s} skipped due to errors; {n_warnings} skill{?s} with warnings."
+    } else if (n_errors > 0) {
+      "{n_errors} skill{?s} skipped due to errors."
+    } else {
+      "{n_warnings} skill{?s} with validation warnings."
+    }
+
+    details <- map(names(skill_problems), function(path) {
+      prob <- skill_problems[[path]]
+      label <- if (prob$type == "error") " (skipped)" else ""
+
+      path_label <- cli::format_inline("{.path {path}}{label}")
+
+      c(
+        "*" = path_label,
+        set_names(prob$messages, rep(" ", length(prob$messages)))
+      )
+    })
+
+    cli::cli_warn(c(header, unlist(details)))
   }
 
   all_skills
@@ -699,37 +798,34 @@ btw_skills_system_prompt <- function() {
     "## Skills\n\nYou have access to specialized skills that provide detailed guidance for specific tasks."
   }
 
-  skill_items <- vapply(
-    skills,
-    function(skill) {
-      parts <- sprintf(
-        "<skill>\n<name>%s</name>\n<description>%s</description>\n<location>%s</location>",
-        xml_escape(skill$name),
-        xml_escape(skill$description),
-        xml_escape(skill$path)
+  skill_items <- map_chr(skills, function(skill) {
+    parts <- sprintf(
+      "<skill>\n<name>%s</name>\n<description>%s</description>\n<location>%s</location>",
+      xml_escape(skill$name),
+      xml_escape(skill$description),
+      xml_escape(skill$path)
+    )
+    if (!is.null(skill$compatibility)) {
+      parts <- paste0(
+        parts,
+        sprintf(
+          "\n<compatibility>%s</compatibility>",
+          xml_escape(skill$compatibility)
+        )
       )
-      if (!is.null(skill$compatibility)) {
-        parts <- paste0(
-          parts,
-          sprintf(
-            "\n<compatibility>%s</compatibility>",
-            xml_escape(skill$compatibility)
-          )
+    }
+    if (!is.null(skill$allowed_tools)) {
+      allowed_tools <- paste(skill$allowed_tools, collapse = ", ")
+      parts <- paste0(
+        parts,
+        sprintf(
+          "\n<allowed-tools>%s</allowed-tools>",
+          xml_escape(allowed_tools)
         )
-      }
-      if (!is.null(skill$allowed_tools)) {
-        parts <- paste0(
-          parts,
-          sprintf(
-            "\n<allowed-tools>%s</allowed-tools>",
-            xml_escape(skill$allowed_tools)
-          )
-        )
-      }
-      paste0(parts, "\n</skill>")
-    },
-    character(1)
-  )
+      )
+    }
+    paste0(parts, "\n</skill>")
+  })
 
   paste0(
     explanation,
@@ -995,6 +1091,86 @@ btw_skill_install_package <- function(
   install_skill_from_dir(selected, scope = scope, overwrite = overwrite)
 }
 
+description_packages <- function(path) {
+  dcf <- read.dcf(path)
+  fields <- intersect(c("Imports", "Suggests"), colnames(dcf))
+  pkgs <- unlist(map(fields, function(field) {
+    parts <- map_chr(strsplit(dcf[1, field], ",")[[1]], function(x) {
+      sub("\\s*\\(.*\\)$", "", trimws(x))
+    })
+    parts[nzchar(parts) & parts != "R"]
+  }))
+  unique(pkgs)
+}
+
+#' Install skills from all project dependencies
+#'
+#' @description
+#' Discovers R packages that are dependencies of the current project and
+#' installs skills from any that bundle them in `inst/skills/`. If a
+#' `DESCRIPTION` file exists in the working directory, packages are read from
+#' its `Imports` and `Suggests` fields. Otherwise, [renv::dependencies()] is
+#' used as a fallback (requires the renv package).
+#'
+#' Packages without skills are silently skipped. If no dependencies bundle
+#' skills, a message is printed and nothing is installed.
+#'
+#' @param path Path to the project directory. Defaults to the current working
+#'   directory.
+#' @param scope Where to install the skills. See [btw_skill_install_package()]
+#'   for details.
+#' @param overwrite Whether to overwrite existing skills. See
+#'   [btw_skill_install_package()] for details.
+#'
+#' @return The paths to all installed skill directories, invisibly.
+#'
+#' @family skills
+#' @export
+btw_skill_install_project <- function(path = ".", scope = "project", overwrite = NULL) {
+  check_string(path)
+  check_string(scope)
+  if (!is.null(overwrite)) {
+    check_bool(overwrite)
+  }
+
+  desc_path <- file.path(path, "DESCRIPTION")
+  deps <- if (file.exists(desc_path)) {
+    description_packages(desc_path)
+  } else {
+    rlang::check_installed("renv", reason = "to discover project dependencies.")
+    tryCatch(
+      unique(renv::dependencies(path, progress = FALSE)$Package),
+      error = function(e) {
+        cli::cli_abort("Could not determine project dependencies.", parent = e)
+      }
+    )
+  }
+
+  packages_with_skills <- keep(deps, function(pkg) {
+    skills_dir <- system.file("skills", package = pkg)
+    nzchar(skills_dir) && length(list.dirs(skills_dir, recursive = FALSE)) > 0
+  })
+
+  if (length(packages_with_skills) == 0) {
+    cli::cli_inform("No project dependencies found with available skills.")
+    return(invisible(character(0)))
+  }
+
+  installed <- map(packages_with_skills, function(pkg) {
+    tryCatch(
+      btw_skill_install_package(pkg, scope = scope, overwrite = overwrite),
+      error = function(e) {
+        cli::cli_warn(
+          "Could not install skills from {.pkg {pkg}}: {conditionMessage(e)}"
+        )
+        character(0)
+      }
+    )
+  })
+
+  invisible(unlist(installed))
+}
+
 install_skill_from_dir <- function(
   source_dir,
   scope = "project",
@@ -1054,11 +1230,8 @@ install_skill_from_dir <- function(
 
   if (length(validation$warnings) > 0) {
     cli::cli_warn(c(
-      "Installing skill {.val {skill_name}} with validation warnings:",
-      set_names(
-        validation$warnings,
-        rep("!", length(validation$warnings))
-      )
+      "Skill {.val {skill_name}} has validation warnings:",
+      set_names(validation$warnings, rep("*", length(validation$warnings)))
     ))
   }
 

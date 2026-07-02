@@ -20,11 +20,30 @@ function initializeCountUp(element, initialValue, options) {
   return counter
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-  document.querySelectorAll(".status-countup").forEach((element) => {
+function initializeStatusCountups() {
+  const elements = document.querySelectorAll(".status-countup")
+  elements.forEach((element) => {
+    if (statusCounters.has(element)) return
     const counter = initializeCountUp(element, 0)
     statusCounters.set(element, counter)
   })
+  return elements.length > 0
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  if (initializeStatusCountups()) return
+
+  let attempt = 0
+  const maxAttempts = 5
+  const baseDelay = 100
+
+  function retry() {
+    attempt++
+    if (initializeStatusCountups() || attempt >= maxAttempts) return
+    setTimeout(retry, baseDelay * Math.pow(2, attempt))
+  }
+
+  setTimeout(retry, baseDelay)
 })
 
 if (typeof Shiny !== "undefined") {
@@ -32,11 +51,12 @@ if (typeof Shiny !== "undefined") {
     const element = document.getElementById(message.id)
     if (element) {
       const counter = statusCounters.get(element)
-      const lastValue = parseFloat(element.dataset.value | "0")
+      const lastValue = parseFloat(element.dataset.value || "0")
 
-      if (counter && message.value) {
+      if (counter && Object.hasOwn(message, "value")) {
         if (
           element.dataset.type === "cost" &&
+          message.value > 0 &&
           (lastValue < 0.1 || message.value < 0.1)
         ) {
           const newCounter = initializeCountUp(element, lastValue, {
@@ -60,6 +80,19 @@ if (typeof Shiny !== "undefined") {
         element.classList.add("btw-status-unknown")
       }
     }
+  })
+
+  Shiny.addCustomMessageHandler("btw_reset_status", function (message) {
+    const elements = document.querySelectorAll(".status-countup")
+    elements.forEach((element) => {
+      if (!element.id.startsWith(message.ns)) return
+      element.classList.remove("btw-status-recalculating", "btw-status-unknown")
+      element.dataset.value = 0
+      const counter = statusCounters.get(element)
+      if (counter) {
+        counter.update(0)
+      }
+    })
   })
 }
 
@@ -85,12 +118,27 @@ const inIframe = window.self !== window.top
 const inIDE = document.querySelector(".btw-in-ide") !== null
 
 if (inIframe && inIDE) {
+  // Matches both old Lit (shiny-markdown-stream) and new React (.shiny-chat-message-content)
+  const STREAM_SELECTOR = "shiny-markdown-stream, .shiny-chat-message-content"
+
   const stopObserving = observeShinyMarkdownStream((streamEl) => {
     enhanceCodeActions(streamEl)
   })
 
+  // New React shinychat: btw-run-r-result dispatches this event after rendering
+  // its per-block copy buttons. Add IDE action buttons to source code blocks only.
+  document.addEventListener("btw-run-r-rendered", (e) => {
+    enhanceBtwCodeActions(e.target)
+  })
+
+  // Backfill any btw-run-r-result elements that rendered before this listener
+  // was installed (e.g. initial page load when btw-run-r executes first).
+  document.querySelectorAll("btw-run-r-result").forEach((result) => {
+    enhanceBtwCodeActions(result)
+  })
+
   function isMarkdownStream(el) {
-    return el.matches("shiny-markdown-stream")
+    return el.matches(STREAM_SELECTOR)
   }
 
   function canEnhance(el) {
@@ -106,6 +154,11 @@ if (inIframe && inIDE) {
 
     function attachObserver(el) {
       if (!isMarkdownStream(el) || observers.has(el)) return
+
+      // Enhance any content already in the element. In React shinychat the
+      // element arrives fully populated in one commit, so the per-element
+      // observer below would never fire for that initial content.
+      callback(el)
 
       let timeoutId = null
 
@@ -123,7 +176,7 @@ if (inIframe && inIDE) {
       observers.set(el, observer)
     }
 
-    document.querySelectorAll("shiny-markdown-stream").forEach(attachObserver)
+    document.querySelectorAll(STREAM_SELECTOR).forEach(attachObserver)
 
     const rootObserver = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
@@ -135,7 +188,7 @@ if (inIframe && inIDE) {
           }
 
           node
-            .querySelectorAll?.("shiny-markdown-stream")
+            .querySelectorAll?.(STREAM_SELECTOR)
             .forEach(attachObserver)
         })
       })
@@ -159,8 +212,23 @@ if (inIframe && inIDE) {
       if (!pre || !canEnhance(pre)) return
 
       const wrapper = ensureWrapper(pre)
-      moveCopyButton(wrapper, copyButton)
       installActionButtons(wrapper, pre)
+      moveCopyButton(wrapper, copyButton)
+    })
+  }
+
+  function enhanceBtwCodeActions(result) {
+    result.querySelectorAll(".btw-block-copy-btn").forEach((copyButton) => {
+      const pre = copyButton.closest("pre")
+      if (!pre) return
+
+      const wrapper = ensureWrapper(pre)
+
+      // Install IDE action buttons first, then copy button so it appears last
+      if (pre.closest(".btw-output-source")) {
+        installActionButtons(wrapper, pre)
+      }
+      moveCopyButton(wrapper, copyButton)
     })
   }
 

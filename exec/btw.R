@@ -4,7 +4,14 @@
 #|   Describe R objects, documentation, and workspace state in LLM-friendly
 #|   text. Wraps btw package tools for docs, pkg, info, and cran operations.
 #| launcher:
-#|   default-packages: [base, datasets, utils, stats, methods, btw]
+#|   default-packages: [base, datasets, utils, stats, methods]
+suppressPackageStartupMessages({
+  suppressMessages({
+    library(utils)
+    library(datasets)
+    library(btw)
+  })
+})
 
 # Global options --------------------------------------------------------------
 
@@ -21,7 +28,16 @@ if (version) {
 has_value <- function(x) !is.na(x) && nzchar(x)
 
 btw_json_output <- function(x) {
-  cat(jsonlite::toJSON(x, auto_unbox = TRUE, pretty = TRUE, na = "null"), "\n")
+  cat(
+    jsonlite::toJSON(
+      x,
+      auto_unbox = TRUE,
+      pretty = TRUE,
+      na = "null",
+      null = "null"
+    ),
+    "\n"
+  )
 }
 
 btw_output <- function(x) {
@@ -62,9 +78,6 @@ btw_docs_help <- function(topic, package) {
       )
     }
     btw_output(btw_this(btw:::as_btw_docs_topic(parts[1], parts[2])))
-  } else if (grepl("^\\{.+\\}$", topic)) {
-    pkg_name <- sub("^\\{(.+)\\}$", "\\1", topic)
-    btw_output(btw_this(btw:::as_btw_docs_package(pkg_name)))
   } else if (has_value(package)) {
     btw_output(btw_this(btw:::as_btw_docs_topic(package, topic)))
   } else {
@@ -77,6 +90,95 @@ btw_docs_help <- function(topic, package) {
     } else {
       btw_output(result)
     }
+  }
+}
+
+btw_docs_topics <- function(package, only, json = FALSE) {
+  if (!only %in% c("", "help", "vignettes")) {
+    stop("--only must be \"help\" or \"vignettes\"", call. = FALSE)
+  }
+
+  include_help <- only == "" || only == "help"
+  include_vignettes <- only == "" || only == "vignettes"
+
+  if (json) {
+    out <- list()
+
+    if (include_help) {
+      result <- btw:::btw_tool_docs_package_help_topics_impl(package)
+      df <- S7::prop(result, "extra")$data
+      out$help <- lapply(seq_len(nrow(df)), function(i) {
+        list(
+          topic_id = df$topic_id[[i]],
+          title = df$title[[i]],
+          aliases = df$aliases[[i]]
+        )
+      })
+    }
+
+    if (include_vignettes) {
+      out$vignettes <- tryCatch(
+        {
+          result <- btw:::btw_tool_docs_available_vignettes_impl(package)
+          df <- S7::prop(result, "extra")$data
+          lapply(seq_len(nrow(df)), function(i) {
+            list(vignette = df$vignette[[i]], title = df$title[[i]])
+          })
+        },
+        error = function(e) list()
+      )
+    }
+
+    btw_json_output(out)
+    return(invisible(NULL))
+  }
+
+  if (include_help) {
+    result <- btw:::btw_tool_docs_package_help_topics_impl(package)
+    df <- S7::prop(result, "extra")$data
+    lines <- mapply(
+      function(topic_id, title, aliases) {
+        sprintf("* `%s` - %s", topic_id, title)
+      },
+      df$topic_id,
+      df$title,
+      df$aliases
+    )
+    cat(
+      "## Help topics\n\n",
+      lines,
+      sprintf(
+        "\nUse `btw docs help %s::<topic>` to read a help page.\n",
+        package
+      ),
+      sep = "\n"
+    )
+  }
+
+  if (include_vignettes) {
+    if (include_help) {
+      cat("\n")
+    }
+    cat("## Vignettes\n\n")
+    tryCatch(
+      {
+        result <- btw:::btw_tool_docs_available_vignettes_impl(package)
+        df <- S7::prop(result, "extra")$data
+        lines <- sprintf("* `%s` - %s", df$vignette, df$title)
+        cat(
+          lines,
+          sprintf(
+            "\nUse `btw docs vignette %s --name <name>` to read a vignette.\n",
+            package
+          ),
+          sep = "\n"
+        )
+      },
+      error = function(e) {
+        msg <- cli::ansi_strip(conditionMessage(e))
+        cat(msg, "\n")
+      }
+    )
   }
 }
 
@@ -144,7 +246,7 @@ btw_pkg_coverage <- function(path, file, json = FALSE) {
   }
 }
 
-btw_info_platform <- function(json = FALSE) {
+btw_system_info <- function(json = FALSE) {
   result <- btw:::btw_tool_sessioninfo_platform_impl()
   if (json) {
     btw_json_output(S7::prop(result, "extra"))
@@ -153,31 +255,51 @@ btw_info_platform <- function(json = FALSE) {
   }
 }
 
-btw_info_packages <- function(packages, deps, check, json = FALSE) {
-  pkgs <- packages
-  if (check && length(pkgs) > 0) {
-    if (json) {
-      results <- lapply(pkgs, function(pkg) {
-        result <- btw:::btw_tool_sessioninfo_is_package_installed_impl(pkg)
-        S7::prop(result, "extra")
-      })
-      btw_json_output(results)
-    } else {
-      for (pkg in pkgs) {
-        btw_output(btw:::btw_tool_sessioninfo_is_package_installed_impl(pkg))
+btw_check_installed <- function(packages, fail = FALSE, json = FALSE) {
+  results <- lapply(packages, function(pkg) {
+    tryCatch(
+      btw:::btw_tool_sessioninfo_is_package_installed_impl(pkg),
+      error = function(e) e
+    )
+  })
+
+  errors <- vapply(results, inherits, logical(1), "error")
+
+  if (json) {
+    data <- unname(Map(
+      function(pkg, r) {
+        if (inherits(r, "error")) {
+          list(package = pkg, version = NULL, installed = FALSE)
+        } else {
+          extra <- S7::prop(r, "extra")
+          extra[["installed"]] <- TRUE
+          extra
+        }
+      },
+      packages,
+      results
+    ))
+    btw_json_output(data)
+  } else {
+    for (r in results) {
+      if (inherits(r, "error")) {
+        cat(cli::ansi_strip(conditionMessage(r)), "\n", file = stderr())
+      } else {
+        btw_output(r)
       }
     }
+  }
+
+  if (fail && any(errors)) quit(status = 1)
+}
+
+btw_installed_packages <- function(packages, deps, json = FALSE) {
+  deps_val <- if (has_value(deps)) deps else ""
+  result <- btw:::btw_tool_sessioninfo_package_impl(packages, deps_val)
+  if (json) {
+    btw_json_output(S7::prop(result, "extra")$data)
   } else {
-    if (length(pkgs) == 0) {
-      pkgs <- "attached"
-    }
-    deps_val <- if (has_value(deps)) deps else ""
-    result <- btw:::btw_tool_sessioninfo_package_impl(pkgs, deps_val)
-    if (json) {
-      btw_json_output(S7::prop(result, "extra")$data)
-    } else {
-      btw_output(result)
-    }
+    btw_output(result)
   }
 }
 
@@ -201,6 +323,250 @@ btw_cran_search <- function(query, format, n, json = FALSE) {
   }
 }
 
+btw_skills_get <- function(source, skills, all, json = FALSE) {
+  is_github <- grepl("/", source, fixed = TRUE)
+  skill_dirs <- if (is_github) {
+    btw_skills_get_dirs_from_github(source)
+  } else {
+    btw_skills_get_dirs_from_package(source)
+  }
+
+  if (all) {
+    btw_skills_get_content_output(skill_dirs, is_github = is_github)
+  } else if (length(skills) > 0) {
+    dir_names <- basename(skill_dirs)
+    missing_skills <- setdiff(skills, dir_names)
+    if (length(missing_skills) > 0) {
+      stop(
+        "Skills not found: ",
+        paste(missing_skills, collapse = ", "),
+        ". Available: ",
+        paste(dir_names, collapse = ", "),
+        call. = FALSE
+      )
+    }
+    btw_skills_get_content_output(skill_dirs[dir_names %in% skills], is_github = is_github)
+  } else {
+    btw_skills_get_list_output(skill_dirs, json = json, is_github = is_github)
+  }
+}
+
+btw_skills_get_dirs_from_package <- function(package) {
+  rlang::check_installed(package, reason = "to list skills from it.")
+  skills_dir <- system.file("skills", package = package)
+  if (!nzchar(skills_dir) || !dir.exists(skills_dir)) {
+    stop("Package '", package, "' does not bundle any skills.", call. = FALSE)
+  }
+  subdirs <- list.dirs(skills_dir, full.names = TRUE, recursive = FALSE)
+  skill_dirs <- subdirs[file.exists(file.path(subdirs, "SKILL.md"))]
+  if (length(skill_dirs) == 0) {
+    stop("Package '", package, "' does not bundle any skills.", call. = FALSE)
+  }
+  skill_dirs
+}
+
+btw_skills_get_dirs_from_github <- function(repo) {
+  rlang::check_installed("gh", reason = "to fetch skills from GitHub.")
+  repo_og <- repo
+  repo <- btw:::parse_github_repo(repo)
+
+  tmp_zip <- tempfile(fileext = ".zip")
+  tryCatch(
+    gh::gh(
+      "/repos/{owner}/{repo}/zipball/{ref}",
+      owner = repo$owner,
+      repo = repo$repo,
+      ref = repo$ref,
+      .destfile = tmp_zip
+    ),
+    error = function(e) {
+      stop(
+        "Failed to download from GitHub repository '",
+        repo_og,
+        "': ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+    }
+  )
+
+  tmp_dir <- tempfile("btw_gh_skill_")
+  utils::unzip(tmp_zip, exdir = tmp_dir)
+
+  skill_files <- list.files(
+    tmp_dir,
+    pattern = "^SKILL\\.md$",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+  if (length(skill_files) == 0) {
+    stop(
+      "No skills found in GitHub repository '",
+      repo_og,
+      "'.",
+      call. = FALSE
+    )
+  }
+  dirname(skill_files)
+}
+
+btw_skills_get_list_output <- function(skill_dirs, json = FALSE, is_github = FALSE) {
+  skills <- lapply(skill_dirs, function(skill_dir) {
+    skill_md_path <- file.path(skill_dir, "SKILL.md")
+    metadata <- btw:::extract_skill_metadata(skill_md_path)
+    name <- if (!is.null(metadata$name) && nzchar(metadata$name)) {
+      metadata$name
+    } else {
+      basename(skill_dir)
+    }
+    description <- if (!is.null(metadata$description)) metadata$description else ""
+    entry <- list(name = name, description = description)
+    if (!is_github) entry$location <- skill_md_path
+    entry
+  })
+
+  if (json) {
+    btw_json_output(skills)
+    return(invisible(NULL))
+  }
+
+  for (skill in skills) {
+    location_xml <- if (!is_github) {
+      sprintf("<location>%s</location>\n", btw:::xml_escape(skill$location))
+    } else {
+      ""
+    }
+    cat(sprintf(
+      "<skill>\n<name>%s</name>\n<description>%s</description>\n%s</skill>\n",
+      btw:::xml_escape(skill$name),
+      btw:::xml_escape(skill$description),
+      location_xml
+    ))
+  }
+}
+
+btw_skills_get_content_output <- function(skill_dirs, is_github = FALSE) {
+  outputs <- character(length(skill_dirs))
+  for (i in seq_along(skill_dirs)) {
+    skill_dir <- skill_dirs[[i]]
+    skill_md_path <- file.path(skill_dir, "SKILL.md")
+    fm <- frontmatter::read_front_matter(skill_md_path)
+    skill_text <- if (!is.null(fm$body)) fm$body else ""
+    metadata <- if (!is.null(fm$data)) fm$data else list()
+    name <- if (!is.null(metadata$name) && nzchar(metadata$name)) {
+      metadata$name
+    } else {
+      basename(skill_dir)
+    }
+    resources <- btw:::list_skill_resources(skill_dir)
+    resources_listing <- format_resources_listing_relative(resources)
+    full_content <- paste0(skill_text, resources_listing)
+    tag_open <- if (!is_github) {
+      sprintf('<skill name="%s" path="%s">', btw:::xml_escape(name), btw:::xml_escape(skill_dir))
+    } else {
+      sprintf('<skill name="%s">', btw:::xml_escape(name))
+    }
+    outputs[[i]] <- sprintf("%s\n%s\n</skill>", tag_open, full_content)
+  }
+  cat(paste(outputs, collapse = "\n\n"), "\n")
+}
+
+format_resources_listing_relative <- function(resources) {
+  if (!btw:::has_skill_resources(resources)) {
+    return("")
+  }
+  parts <- "\n\n---\n\n## Bundled Resources\n"
+  if (length(resources$scripts) > 0) {
+    parts <- c(
+      parts,
+      "\n\n**Scripts:**\n",
+      paste0("- ", file.path("scripts", resources$scripts), collapse = "\n")
+    )
+  }
+  if (length(resources$references) > 0) {
+    parts <- c(
+      parts,
+      "\n\n**References:**\n",
+      paste0(
+        "- ",
+        file.path("references", resources$references),
+        collapse = "\n"
+      )
+    )
+  }
+  if (length(resources$assets) > 0) {
+    parts <- c(
+      parts,
+      "\n\n**Assets:**\n",
+      paste0("- ", file.path("assets", resources$assets), collapse = "\n")
+    )
+  }
+  paste(parts, collapse = "")
+}
+
+btw_skills_get_resource <- function(source, skill_name, resources) {
+  if (length(resources) == 0) {
+    stop("At least one resource path is required", call. = FALSE)
+  }
+
+  skill_dirs <- if (grepl("/", source, fixed = TRUE)) {
+    btw_skills_get_dirs_from_github(source)
+  } else {
+    btw_skills_get_dirs_from_package(source)
+  }
+
+  skill_dir <- NULL
+  for (d in skill_dirs) {
+    md <- btw:::extract_skill_metadata(file.path(d, "SKILL.md"))
+    if (identical(md$name, skill_name) || identical(basename(d), skill_name)) {
+      skill_dir <- d
+      break
+    }
+  }
+  if (is.null(skill_dir)) {
+    stop(
+      "Skill '",
+      skill_name,
+      "' not found. Available: ",
+      paste(basename(skill_dirs), collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  for (resource_path in resources) {
+    full_path <- file.path(skill_dir, resource_path)
+    if (!file.exists(full_path)) {
+      stop("Resource not found: ", resource_path, call. = FALSE)
+    }
+    cat(readLines(full_path, warn = FALSE), sep = "\n")
+    cat("\n")
+  }
+}
+
+btw_skills_install <- function(source, skills, scope, overwrite) {
+  skills_val <- if (length(skills)) skills else list(NULL)
+  scope_val <- if (has_value(scope)) scope else "project"
+  overwrite_val <- if (is.na(overwrite)) NULL else overwrite
+
+  if (source == ".") {
+    btw_skill_install_project(scope = scope_val, overwrite = overwrite_val)
+  } else {
+    install_one <- if (grepl("/", source, fixed = TRUE)) {
+      btw_skill_install_github
+    } else {
+      btw_skill_install_package
+    }
+    for (skill_val in skills_val) {
+      install_one(
+        source,
+        skill = skill_val,
+        scope = scope_val,
+        overwrite = overwrite_val
+      )
+    }
+  }
+}
+
 btw_cran_info <- function(package, json = FALSE) {
   result <- pkgsearch::cran_package(package)
   if (json) {
@@ -215,14 +581,27 @@ btw_cran_info <- function(package, json = FALSE) {
 switch(
   group <- "",
 
-  # docs ----
+  #| title: Access R documentation
   docs = {
     switch(
       docs_cmd <- "",
 
-      # docs help ----
+      #| title: List help topics and vignettes for a package
+      topics = {
+        #| description: Package name.
+        package <- NULL
+        #| description: Limit output to "help" topics or "vignettes".
+        #| short: 'o'
+        only <- ""
+        #| description: Output as JSON with top-level keys "help" (array of {topic_id, title, aliases[]}) and "vignettes" (array of {vignette, title}).
+        json <- FALSE
+
+        tryCatch(btw_docs_topics(package, only, json), error = btw_error)
+      },
+
+      #| title: Show help for a topic or package
       help = {
-        #| description: Help topic, package name, or {package} for package listing.
+        #| description: Help topic, or pkg::topic to scope to a specific package.
         topic <- NULL
         #| description: Package name to scope the help topic.
         #| short: 'p'
@@ -231,7 +610,7 @@ switch(
         tryCatch(btw_docs_help(topic, package), error = btw_error)
       },
 
-      # docs vignette ----
+      #| title: Read a package vignette
       vignette = {
         #| description: Package name.
         package <- NULL
@@ -245,7 +624,7 @@ switch(
         tryCatch(btw_docs_vignette(package, name, list), error = btw_error)
       },
 
-      # docs news ----
+      #| title: Show package NEWS
       news = {
         #| description: Package name.
         package <- NULL
@@ -259,7 +638,7 @@ switch(
     if (docs_cmd == "") btw_self_help("docs")
   },
 
-  # pkg ----
+  #| title: Work with an R package under development
   pkg = {
     #| description: Path to package directory.
     path <- "."
@@ -267,17 +646,17 @@ switch(
     switch(
       pkg_cmd <- "",
 
-      # pkg document ----
+      #| title: Generate package documentation
       document = {
         tryCatch(btw_pkg_document(path), error = btw_error)
       },
 
-      # pkg check ----
+      #| title: Run R CMD check
       check = {
         tryCatch(btw_pkg_check(path), error = btw_error)
       },
 
-      # pkg test ----
+      #| title: Run package tests
       test = {
         #| description: Regex to filter test files.
         #| short: 'f'
@@ -285,12 +664,12 @@ switch(
         tryCatch(btw_pkg_test(path, filter), error = btw_error)
       },
 
-      # pkg load ----
+      #| title: Load package with pkgload
       load = {
         tryCatch(btw_pkg_load(path), error = btw_error)
       },
 
-      # pkg coverage ----
+      #| title: Measure package test coverage
       coverage = {
         #| description: Filename for line-level coverage details.
         file <- ""
@@ -302,39 +681,65 @@ switch(
     if (pkg_cmd == "") btw_self_help("pkg")
   },
 
-  # info ----
+  #| title: "[Deprecated] Inspect the R session and environment"
   info = {
-    #| description: Output as JSON.
-    json <- FALSE
-
     switch(
       info_cmd <- "",
-
-      # info platform ----
-      platform = {
-        tryCatch(btw_info_platform(json), error = btw_error)
-      },
-
-      # info packages ----
+      platform = {},
       packages = {
-        #| description: Package names to query.
         `packages...` <- c()
-        #| description: Dependency types to include.
         deps <- ""
-        #| description: Check if packages are installed.
-        #| short: 'c'
         check <- FALSE
-
-        tryCatch(
-          btw_info_packages(`packages...`, deps, check, json),
-          error = btw_error
-        )
       }
     )
-    if (info_cmd == "") btw_self_help("info")
+    cat(
+      "btw info is deprecated. Use:\n",
+      "  btw system-info        (was: btw info platform)\n",
+      "  btw check-installed    (was: btw info packages --check)\n",
+      "  btw installed-packages (was: btw info packages)\n",
+      file = stderr()
+    )
+    quit(status = 1)
   },
 
-  # cran ----
+  #| title: Show platform and R session info
+  system_info = {
+    #| description: "Output as JSON object with fields: r_version, os, system, ui, language, locale, encoding, timezone, date."
+    json <- FALSE
+
+    tryCatch(btw_system_info(json), error = btw_error)
+  },
+
+  #| title: Check if packages are installed
+  check_installed = {
+    #| description: Package names to check.
+    #| required: true
+    `packages...` <- c()
+    #| description: Exit with a non-zero status if any package is not installed.
+    fail <- FALSE
+    #| description: "Output as JSON array of objects with fields: package (string), version (string or null if not installed), installed (bool)."
+    json <- FALSE
+
+    tryCatch(btw_check_installed(`packages...`, fail, json), error = btw_error)
+  },
+
+  #| title: Show installed package versions
+  installed_packages = {
+    #| description: Package names to query.
+    #| required: true
+    `packages...` <- c()
+    #| description: "Dependency types to include. Use TRUE for all types, FALSE for none, or a comma-separated list of types: Depends, Imports, Suggests, LinkingTo, Enhances."
+    deps <- ""
+    #| description: "Output as JSON array of objects with fields: package, ondiskversion, loadedversion, path, loadedpath, attached, is_base, date, source, md5ok, library."
+    json <- FALSE
+
+    tryCatch(
+      btw_installed_packages(`packages...`, deps, json),
+      error = btw_error
+    )
+  },
+
+  #| title: Query CRAN package metadata
   cran = {
     #| description: Output as JSON.
     json <- FALSE
@@ -342,7 +747,7 @@ switch(
     switch(
       cran_cmd <- "",
 
-      # cran search ----
+      #| title: Search CRAN for packages
       search = {
         #| description: Search query.
         query <- NULL
@@ -355,7 +760,7 @@ switch(
         tryCatch(btw_cran_search(query, format, n, json), error = btw_error)
       },
 
-      # cran info ----
+      #| title: Show CRAN metadata for a package
       info = {
         #| description: Package name.
         package <- NULL
@@ -363,6 +768,118 @@ switch(
       }
     )
     if (cran_cmd == "") btw_self_help("cran")
+  },
+
+  #| title: Manage btw skills
+  skills = {
+    switch(
+      skills_cmd <- "",
+
+      #| title: List available skills from a package or GitHub repository
+      #| examples:
+      #|   - btw skills list btw
+      #|   - btw skills list posit-dev/btw
+      list = {
+        #| description: Package name (e.g. "btw") or GitHub repo spec (e.g. "posit-dev/btw").
+        source <- NULL
+        #| description: "Output as JSON array of objects with fields: name, description, location."
+        json <- FALSE
+
+        tryCatch(btw_skills_get(source, c(), FALSE, json), error = btw_error)
+      },
+
+      #| title: Fetch skills from a package or GitHub repository
+      #| examples:
+      #|   - btw skills get btw
+      #|   - btw skills get btw r-btw-cli
+      #|   - btw skills get btw --all
+      #|   - btw skills get posit-dev/btw my-skill
+      get = {
+        #| description: Package name (e.g. "btw") or GitHub repo spec (e.g. "posit-dev/btw").
+        source <- NULL
+        #| description: "Skill names to fetch. If omitted, lists available skills."
+        `skills...` <- c()
+        #| description: Fetch all skills from the source.
+        all <- FALSE
+
+        tryCatch(btw_skills_get(source, `skills...`, all), error = btw_error)
+      },
+
+      #| title: Fetch a resource file from a skill
+      #| examples:
+      #|   - btw skills resource posit-dev/skills shiny-bslib references/accordions.md
+      #|   - btw skills resource posit-dev/skills shiny-bslib references/accordions.md references/best-practices.md
+      resource = {
+        #| description: Package name (e.g. "btw") or GitHub repo spec (e.g. "posit-dev/btw").
+        source <- NULL
+        #| description: Skill name.
+        skill <- NULL
+        #| description: Resource paths relative to the skill directory.
+        `resources...` <- c()
+
+        tryCatch(
+          btw_skills_get_resource(source, skill, `resources...`),
+          error = btw_error
+        )
+      },
+
+      #| title: Install a skill from a package or GitHub repository
+      install = {
+        #| description: Package name (e.g. "btw"), GitHub repo spec (e.g. "posit-dev/btw"), or "." to install skills from all project dependencies (requires renv).
+        source <- NULL
+        #| description: Skill name to install (if the source has multiple skills).
+        #| short: 's'
+        #| action: append
+        skill <- c()
+        #| description: Scope for installation ("project" or "user").
+        scope <- "project"
+        #| description: Overwrite an existing skill if it is already installed.
+        overwrite <- FALSE
+
+        tryCatch(
+          btw_skills_install(source, skill, scope, overwrite),
+          error = btw_error
+        )
+      }
+    )
+    if (skills_cmd == "") btw_self_help("skills")
+  },
+
+  #| title: Show btw CLI usage guide for AI agents
+  help = {
+    skill_path <- system.file(
+      "cli-skill",
+      "r-btw-cli",
+      "SKILL.md",
+      package = "btw"
+    )
+    if (!nzchar(skill_path)) {
+      cat("btw CLI skill not found.\n", file = stderr())
+      quit(status = 1)
+    }
+    cat(frontmatter::read_front_matter(skill_path)$body, "\n")
+  },
+
+  #| title: Run btw_app() in the current directory
+  app = {
+    #| description: The client (provider/model string) to use
+    client <- ""
+
+    #| description: Comma-separated list of btw tools to enable in the app (by name or group).
+    tools <- ""
+
+    #| description: Path to a `btw.md` file.
+    path_btw <- ""
+
+    tools <- if (has_value(tools)) {
+      strsplit(tools, ",", fixed = TRUE)[[1]]
+    }
+
+    btw::btw_app(
+      client = if (has_value(client)) client,
+      tools = tools,
+      path_btw = if (has_value(path_btw)) path_btw
+    )
   }
 )
 

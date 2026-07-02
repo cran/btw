@@ -69,6 +69,7 @@ this function have access to the tools:
    Name \tab Description \cr
    \code{\link[=btw_tool_files_edit]{btw_tool_files_edit()}} \tab Edit a text file using hashline references for precise, targeted modifications. \cr
    \code{\link[=btw_tool_files_list]{btw_tool_files_list()}} \tab List files or directories in the project. \cr
+   \code{\link[=btw_tool_files_patch]{btw_tool_files_patch()}} \tab Apply a patch envelope that adds, updates, deletes, or moves files atomically. \cr
    \code{\link[=btw_tool_files_read]{btw_tool_files_read()}} \tab Read the contents of a text file. \cr
    \code{\link[=btw_tool_files_replace]{btw_tool_files_replace()}} \tab Find and replace exact string occurrences in a text file. \cr
    \code{\link[=btw_tool_files_search]{btw_tool_files_search()}} \tab Search code files in the project. \cr
@@ -151,12 +152,15 @@ this function have access to the tools:
 ch <- ellmer::chat_anthropic()
 
 # register all of the available tools
-ch$register_tools(btw_tools())
+ch1 <- ch$clone()
+ch1$register_tools(btw_tools())
 
 # or register only the tools related to fetching documentation
-ch$register_tools(btw_tools("docs"))
+ch2 <- ch$clone()
+ch2$register_tools(btw_tools("docs"))
 
 # ensure that the current tools persist
-ch$register_tools(c(ch$get_tools(), btw_tools()))
+ch3 <- ch$clone()
+ch3$register_tools(c(ch3$get_tools(), btw_tools()))
 \dontshow{\}) # examplesIf}
 }

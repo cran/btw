@@ -5,11 +5,6 @@
 
 import { ICONS } from "./btw-icons.js"
 
-// Ensure shinychat's hidden requests set exists
-window.shinychat = window.shinychat || {}
-window.shinychat.hiddenToolRequests =
-  window.shinychat.hiddenToolRequests || new Set()
-
 /**
  * Formats code as a Markdown code block for rendering.
  * @param {string} content - The code content
@@ -66,20 +61,6 @@ class BtwRunRResult extends HTMLElement {
     } else {
       this.classStatus = ""
       this.titleTemplate = "{title}"
-    }
-
-    // Hide the corresponding tool request
-    const requestId = this.getAttribute("request-id")
-    if (requestId) {
-      // TODO: Remove after next shinychat release (posit-dev/shinychat#163)
-      window.shinychat.hiddenToolRequests.add(requestId)
-      this.dispatchEvent(
-        new CustomEvent("shiny-tool-request-hide", {
-          detail: { request_id: requestId },
-          bubbles: true,
-          cancelable: true,
-        }),
-      )
     }
 
     this.render()
@@ -332,6 +313,8 @@ class BtwRunRResult extends HTMLElement {
       }
     }
 
+    this.addBlockCopyButtons()
+
     // Allow clicking anywhere on the header to toggle, except on action buttons
     const header = this.querySelector(".card-header")
     if (header) {
@@ -346,6 +329,43 @@ class BtwRunRResult extends HTMLElement {
         this.toggleCollapse(e)
       })
     }
+  }
+
+  /**
+   * Add per-block copy buttons to each pre element in the output container.
+   * Idempotent: skips any pre that already has a button (safe to call after re-render).
+   */
+  addBlockCopyButtons() {
+    const outputContainer = this.querySelector(".btw-run-output")
+    if (!outputContainer) return
+
+    outputContainer.querySelectorAll("pre").forEach((pre) => {
+      if (pre.querySelector(".btw-block-copy-btn")) return
+
+      const btn = document.createElement("button")
+      btn.className = "btw-block-copy-btn"
+      btn.setAttribute("aria-label", "Copy to clipboard")
+      btn.innerHTML = '<i class="bi" aria-hidden="true"></i>'
+
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation()
+        const code = pre.querySelector("code")
+        const text = code?.textContent ?? pre.textContent ?? ""
+        try {
+          await copyToClipboard(text)
+          btn.classList.add("btw-block-copy-btn-checked")
+          setTimeout(() => {
+            btn.classList.remove("btw-block-copy-btn-checked")
+          }, 1500)
+        } catch (err) {
+          console.error("Failed to copy:", err)
+        }
+      })
+
+      pre.appendChild(btn)
+    })
+
+    this.dispatchEvent(new CustomEvent("btw-run-r-rendered", { bubbles: true }))
   }
 
   /**

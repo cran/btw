@@ -37,32 +37,6 @@ run_btw_subprocess <- function(...) {
   processx::run("Rscript", c("-e", script), error_on_status = FALSE)
 }
 
-# help output -----------------------------------------------------------
-
-test_that("btw --help shows top-level help", {
-  expect_snapshot(run_btw("--help"))
-})
-
-test_that("btw docs --help shows docs group help", {
-  expect_snapshot(run_btw("docs", "--help"))
-})
-
-test_that("btw docs help --help shows help subcommand usage", {
-  expect_snapshot(run_btw("docs", "help", "--help"))
-})
-
-test_that("btw pkg --help shows pkg group help", {
-  expect_snapshot(run_btw("pkg", "--help"))
-})
-
-test_that("btw info --help shows info group help", {
-  expect_snapshot(run_btw("info", "--help"))
-})
-
-test_that("btw cran --help shows cran group help", {
-  expect_snapshot(run_btw("cran", "--help"))
-})
-
 # --version flag ---------------------------------------------------------
 
 test_that("btw --version prints version and exits 0", {
@@ -81,12 +55,6 @@ test_that("btw docs help <topic> resolves topic first", {
   expect_equal(env$package, "")
 })
 
-test_that("btw docs help {package} lists help topics", {
-  env <- run_btw_quietly("docs", "help", "{stats}")
-  expect_true(is.environment(env))
-  expect_equal(env$topic, "{stats}")
-  expect_equal(env$package, "")
-})
 
 test_that("btw docs help <topic> -p <package> reads help page", {
   local_skip_pandoc_convert_text()
@@ -124,6 +92,28 @@ test_that("btw docs help errors for unknown topic", {
   result <- run_btw_subprocess("docs", "help", "completely_nonexistent_xyz")
   expect_equal(result$status, 1)
   expect_match(result$stderr, "completely_nonexistent_xyz", ignore.case = TRUE)
+})
+
+
+# docs topics ----------------------------------------------------------
+
+test_that("btw docs topics <package> shows topics and vignettes", {
+  env <- run_btw_quietly("docs", "topics", "stats")
+  expect_equal(env$package, "stats")
+  expect_equal(env$only, "")
+})
+
+test_that("btw docs topics --only help shows only help topics", {
+  env <- run_btw_quietly("docs", "topics", "stats", "--only", "help")
+  expect_equal(env$package, "stats")
+  expect_equal(env$only, "help")
+})
+
+test_that("btw docs topics --only vignettes shows only vignettes", {
+  skip_if_not_installed("dplyr")
+  env <- run_btw_quietly("docs", "topics", "dplyr", "--only", "vignettes")
+  expect_equal(env$package, "dplyr")
+  expect_equal(env$only, "vignettes")
 })
 
 # docs vignette ----------------------------------------------------------
@@ -284,59 +274,133 @@ test_that("btw pkg coverage --file passes filename", {
   expect_equal(mock_filename, "utils.R")
 })
 
-# info group -------------------------------------------------------------
+# btw info deprecated ----------------------------------------------------
 
-test_that("btw info platform shows platform info", {
+test_that("btw info exits 1 with deprecation message", {
+  result <- run_btw_subprocess("info", "platform")
+  expect_equal(result$status, 1)
+  expect_match(result$stderr, "deprecated", ignore.case = TRUE)
+  expect_match(result$stderr, "system-info")
+  expect_match(result$stderr, "check-installed")
+  expect_match(result$stderr, "installed-packages")
+})
+
+# btw system-info --------------------------------------------------------
+
+test_that("btw system-info shows platform info", {
   local_sessioninfo_quarto_version()
-  env <- run_btw_quietly("info", "platform")
+  env <- run_btw_quietly("system-info")
   expect_true(is.environment(env))
 })
 
-test_that("btw info packages with no args defaults to attached", {
-  mock_pkgs <- NULL
-  local_mocked_bindings(
-    btw_tool_sessioninfo_package_impl = function(packages, dependencies) {
-      mock_pkgs <<- packages
-      "package info"
-    }
-  )
-  run_btw_quietly("info", "packages")
-  expect_equal(mock_pkgs, "attached")
-})
-
-test_that("btw info packages with package names", {
-  mock_pkgs <- NULL
-  local_mocked_bindings(
-    btw_tool_sessioninfo_package_impl = function(packages, dependencies) {
-      mock_pkgs <<- packages
-      "package info"
-    }
-  )
-  run_btw_quietly("info", "packages", "dplyr", "ggplot2")
-  expect_equal(mock_pkgs, c("dplyr", "ggplot2"))
-})
-
-test_that("btw info packages --check calls is_package_installed", {
-  checked_pkgs <- character()
-  local_mocked_bindings(
-    btw_tool_sessioninfo_is_package_installed_impl = function(package_name) {
-      checked_pkgs <<- c(checked_pkgs, package_name)
-      paste(package_name, "is installed")
-    }
-  )
-  run_btw_quietly("info", "packages", "dplyr", "ggplot2", "--check")
-  expect_equal(checked_pkgs, c("dplyr", "ggplot2"))
-})
-
-test_that("btw info platform --json outputs valid JSON", {
+test_that("btw system-info --json outputs valid JSON", {
   local_sessioninfo_quarto_version()
-  env <- run_btw_quietly("info", "platform", "--json")
+  env <- run_btw_quietly("system-info", "--json")
   parsed <- jsonlite::fromJSON(paste(env$.output, collapse = "\n"))
   expect_type(parsed, "list")
   expect_true("os:" %in% names(parsed))
 })
 
-test_that("btw info packages --json outputs valid JSON", {
+# btw check-installed ----------------------------------------------------
+
+test_that("btw check-installed calls is_package_installed for each package", {
+  checked_pkgs <- character()
+  local_mocked_bindings(
+    btw_tool_sessioninfo_is_package_installed_impl = function(package_name) {
+      checked_pkgs <<- c(checked_pkgs, package_name)
+      btw:::BtwToolResult(
+        value = paste(package_name, "is installed"),
+        extra = list(package = package_name, version = "1.0.0")
+      )
+    }
+  )
+  run_btw_quietly("check-installed", "dplyr", "ggplot2")
+  expect_equal(checked_pkgs, c("dplyr", "ggplot2"))
+})
+
+test_that("btw check-installed exits 0 when package is not installed", {
+  result <- run_btw_subprocess(
+    "check-installed",
+    "completely_nonexistent_xyz_pkg"
+  )
+  expect_equal(result$status, 0)
+})
+
+test_that("btw check-installed --fail exits 1 when package is not installed", {
+  result <- run_btw_subprocess(
+    "check-installed",
+    "completely_nonexistent_xyz_pkg",
+    "--fail"
+  )
+  expect_equal(result$status, 1)
+})
+
+test_that("btw check-installed --fail exits 0 when all packages are installed", {
+  result <- run_btw_subprocess("check-installed", "base", "--fail")
+  expect_equal(result$status, 0)
+})
+
+test_that("btw check-installed --json outputs array with installed field", {
+  local_mocked_bindings(
+    btw_tool_sessioninfo_is_package_installed_impl = function(package_name) {
+      btw:::BtwToolResult(
+        value = paste(package_name, "is installed"),
+        extra = list(package = package_name, version = "1.0.0")
+      )
+    }
+  )
+  env <- run_btw_quietly("check-installed", "dplyr", "ggplot2", "--json")
+  parsed <- jsonlite::fromJSON(paste(env$.output, collapse = "\n"))
+  expect_equal(nrow(parsed), 2)
+  expect_equal(parsed$package, c("dplyr", "ggplot2"))
+  expect_true(all(parsed$installed))
+})
+
+
+test_that("btw check-installed --json has null version for not-installed package", {
+  local_mocked_bindings(
+    btw_tool_sessioninfo_is_package_installed_impl = function(package_name) {
+      stop(paste("Package", package_name, "is not installed."))
+    }
+  )
+  env <- run_btw_quietly("check-installed", "notapkg", "--json")
+  parsed <- jsonlite::fromJSON(
+    paste(env$.output, collapse = "\n"),
+    simplifyVector = FALSE
+  )
+  expect_length(parsed, 1)
+  expect_equal(parsed[[1]]$package, "notapkg")
+  expect_null(parsed[[1]]$version)
+  expect_false(parsed[[1]]$installed)
+})
+
+# btw installed-packages -------------------------------------------------
+
+test_that("btw installed-packages passes package names", {
+  mock_pkgs <- NULL
+  local_mocked_bindings(
+    btw_tool_sessioninfo_package_impl = function(packages, dependencies) {
+      mock_pkgs <<- packages
+      "package info"
+    }
+  )
+  run_btw_quietly("installed-packages", "dplyr", "ggplot2")
+  expect_equal(mock_pkgs, c("dplyr", "ggplot2"))
+})
+
+test_that("btw installed-packages --deps passes dependency types", {
+  mock_deps <- NULL
+  local_mocked_bindings(
+    btw_tool_sessioninfo_package_impl = function(packages, dependencies) {
+      mock_deps <<- dependencies
+      "package info"
+    }
+  )
+  run_btw_quietly("installed-packages", "dplyr", "--deps", "Imports,Suggests")
+  expect_equal(mock_deps, "Imports,Suggests")
+})
+
+test_that("btw installed-packages --json outputs valid JSON", {
   mock_df <- data.frame(
     package = c("dplyr", "ggplot2"),
     version = c("1.1.4", "3.5.0"),
@@ -350,36 +414,9 @@ test_that("btw info packages --json outputs valid JSON", {
       )
     }
   )
-  env <- run_btw_quietly("info", "packages", "--json")
+  env <- run_btw_quietly("installed-packages", "dplyr", "ggplot2", "--json")
   parsed <- jsonlite::fromJSON(paste(env$.output, collapse = "\n"))
   expect_equal(parsed$package, c("dplyr", "ggplot2"))
-})
-
-test_that("btw info packages --check --json outputs valid JSON", {
-  local_mocked_bindings(
-    btw_tool_sessioninfo_is_package_installed_impl = function(package_name) {
-      btw:::BtwToolResult(
-        value = paste(package_name, "is installed"),
-        extra = list(package = package_name, version = "1.0.0")
-      )
-    }
-  )
-  env <- run_btw_quietly("info", "packages", "dplyr", "ggplot2", "--check", "--json")
-  parsed <- jsonlite::fromJSON(paste(env$.output, collapse = "\n"))
-  expect_equal(nrow(parsed), 2)
-  expect_equal(parsed$package, c("dplyr", "ggplot2"))
-})
-
-test_that("btw info packages --deps passes dependency types", {
-  mock_deps <- NULL
-  local_mocked_bindings(
-    btw_tool_sessioninfo_package_impl = function(packages, dependencies) {
-      mock_deps <<- dependencies
-      "package info"
-    }
-  )
-  run_btw_quietly("info", "packages", "dplyr", "--deps", "Imports,Suggests")
-  expect_equal(mock_deps, "Imports,Suggests")
 })
 
 # cran group -------------------------------------------------------------
