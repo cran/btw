@@ -1,5 +1,7 @@
 # Test btw_tool_pkg_src_list_impl ----------------------------------------------
 
+skip_on_cran()
+
 test_that("btw_tool_pkg_src_list_impl returns exported objects by default", {
   result <- btw_tool_pkg_src_list_impl("tools")
 
@@ -375,9 +377,8 @@ test_that("btw_tool_pkg_src_search_impl validates arguments", {
 })
 
 test_that("btw_tool_pkg_src_search_impl searches materialized source for binary-installed packages", {
-  skip_if_not_installed("duckdb")
+  skip_if_not_installed("RSQLite")
   skip_if_not_installed("DBI")
-  withr::local_envvar(TESTTHAT = NA)
 
   result <- btw_tool_pkg_src_search_impl("tools", "file.path")
 
@@ -409,9 +410,8 @@ test_that("btw_tool_pkg_src_search_impl searches materialized source for binary-
 
 test_that("btw_tool_pkg_src_search_impl preserves exact operator names", {
   skip_if_not_installed("vctrs")
-  skip_if_not_installed("duckdb")
+  skip_if_not_installed("RSQLite")
   skip_if_not_installed("DBI")
-  withr::local_envvar(TESTTHAT = NA)
 
   result <- btw_tool_pkg_src_search_impl("vctrs", "vec_cast(value, x)")
   data <- S7::prop(result, "extra")$data
@@ -425,9 +425,8 @@ test_that("btw_tool_pkg_src_search_impl preserves exact operator names", {
 })
 
 test_that("btw_tool_pkg_src_search_impl combines results across multiple terms", {
-  skip_if_not_installed("duckdb")
+  skip_if_not_installed("RSQLite")
   skip_if_not_installed("DBI")
-  withr::local_envvar(TESTTHAT = NA)
 
   result <- btw_tool_pkg_src_search_impl("tools", c("file.path", "toRd"))
   data <- S7::prop(result, "extra")$data

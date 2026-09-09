@@ -39,9 +39,7 @@ priority (later sources override earlier ones when skill names conflict):
 \item Skills from currently \strong{attached} R packages — any package with an
 \verb{inst/skills/} directory that is loaded via \code{\link[=library]{library()}} or \code{\link[=require]{require()}}
 \item User-level skills (\verb{~/.btw/skills}, \verb{~/.config/btw/skills},
-\code{tools::R_user_dir("btw")/skills}). For backwards compatibility, the
-legacy \code{tools::R_user_dir("btw", "config")/skills} path used by briefly
-by btw 1.2.0 is also included at lower priority.
+\code{tools::R_user_dir("btw")/skills})
 \item Project-level skills (\verb{.btw/skills/} or \verb{.agents/skills/})
 }
 
@@ -71,6 +69,8 @@ configuration locations.
 Other skills:
 \code{\link[=btw_skill_install_github]{btw_skill_install_github()}},
 \code{\link[=btw_skill_install_package]{btw_skill_install_package()}},
-\code{\link[=btw_skill_install_project]{btw_skill_install_project()}}
+\code{\link[=btw_skill_install_project]{btw_skill_install_project()}},
+\code{\link[=btw_skill_prompt]{btw_skill_prompt()}},
+\code{\link[=btw_skills_register_slash_commands]{btw_skills_register_slash_commands()}}
 }
 \concept{skills}
